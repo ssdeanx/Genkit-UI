@@ -3,13 +3,15 @@
 import readline from "node:readline";
 import crypto from "node:crypto";
 
-import {
+import type // Specific Params/Payload types used by the CLI
+{
   // Specific Params/Payload types used by the CLI
   MessageSendParams, // Changed from TaskSendParams
   TaskStatusUpdateEvent,
   TaskArtifactUpdateEvent,
   Message,
   Task, // Added for direct Task events
+
   // Other types needed for message/part handling
   TaskState,
   FilePart,

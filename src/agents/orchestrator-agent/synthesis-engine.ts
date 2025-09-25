@@ -32,7 +32,7 @@ export class SynthesisEngine {
       );
 
       // Calculate confidence scores
-      const confidenceMetrics = this.calculateConfidenceMetrics(results, crossValidatedFindings);
+      const confidenceMetrics = this.calculateConfidenceMetrics(crossValidatedFindings);
 
       // Identify gaps and recommendations
       const gapsAndRecommendations = this.identifyGapsAndRecommendations(
@@ -65,7 +65,8 @@ export class SynthesisEngine {
     const grouped = new Map<string, ResearchStepResult[]>();
 
     for (const result of results) {
-      const dimension = result.metadata?.dimension || 'general';
+      // Ensure the dimension is always a string to avoid '{}' type inference
+      const dimension = String(result.metadata?.dimension ?? 'general');
 
       if (!grouped.has(dimension)) {
         grouped.set(dimension, []);
@@ -146,31 +147,53 @@ export class SynthesisEngine {
   }> | null {
     // Try different ways to extract findings from the result data
     if (typeof result.data === 'object' && result.data !== null) {
+      const data = result.data as Record<string, any>; // Cast to a more flexible type
+
       // Check if data has findings array
-      if (Array.isArray((result.data).findings)) {
-        return (result.data).findings;
+      if (Array.isArray(data.findings)) {
+        return data.findings;
       }
 
       // Check if data has results array with findings
-      if (Array.isArray((result.data).results)) {
-        const { results } = result.data;
+      if (Array.isArray(data.results)) {
+        const { results } = data;
         return results.flatMap((r: any) => r.findings ?? []);
       }
 
       // Check if data itself is a finding
-      if ((result.data).claim) {
-        return [result.data];
+      // Ensure that 'data' has the properties of a finding before returning it.
+      // This check is necessary because 'data' is typed as Record<string, any>,
+      // which doesn't guarantee the presence of 'claim', 'evidence', and 'confidence'. The type assertion is safe here because we've checked the properties.
+      if (typeof data.claim === 'string' && typeof data.evidence === 'string' && typeof data.confidence === 'number') {
+        // Construct and return a properly typed finding object instead of returning the raw Record.
+        return [{
+          claim: data.claim,
+          evidence: data.evidence,
+          confidence: data.confidence
+        }];
       }
 
-      // Try to extract from text content
-      if (typeof (result.data).content === 'string') {
-        return this.extractFindingsFromText((result.data).content);
+      // Try to extract from text content (use the typed 'data' variable and safe property access)
+      if (typeof data.content === 'string') {
+        return this.extractFindingsFromText(data.content);
       }
     }
 
-    // Fallback: try to extract from metadata
-    if (result.metadata?.findings) {
-      return result.metadata.findings;
+    // Fallback: try to extract from metadata (normalize and validate)
+    if (Array.isArray(result.metadata?.findings)) {
+      const rawFindings = result.metadata!.findings as any[];
+      const normalized = rawFindings
+        .filter(f => f && (typeof f === 'object'))
+        .map(f => ({
+          claim: typeof f.claim === 'string' ? f.claim : String(f.claim ?? ''),
+          evidence: typeof f.evidence === 'string' ? f.evidence : String(f.evidence ?? ''),
+          confidence: typeof f.confidence === 'number' ? f.confidence : Number(f.confidence ?? 0)
+        }))
+        .filter(f => f.claim.length > 0); // keep only valid entries
+
+      if (normalized.length > 0) {
+        return normalized;
+      }
     }
 
     return null;
@@ -235,8 +258,10 @@ export class SynthesisEngine {
       // Calculate consensus level (sources agreeing / total relevant sources)
       const relevantSources = allResults.filter((r): boolean => {
         const resultDimension = r.metadata?.dimension ?? 'general';
+        // Safely access 'content' property if 'data' is an object, otherwise use the data itself or an empty string.
         const resultContent = typeof r.data === 'string' ? r.data :
-                            (r.data)?.content ?? JSON.stringify(r.data);
+                              (typeof r.data === 'object' && r.data !== null && 'content' in r.data && typeof (r.data as any).content === 'string') ? (r.data as any).content :
+                              JSON.stringify(r.data);
         return resultDimension === finding.dimension ||
                resultContent.toLowerCase().includes(finding.finding.toLowerCase().split(' ')[0]);
       });
@@ -256,15 +281,29 @@ export class SynthesisEngine {
         validationStatus = 'unconfirmed';
       }
 
-      return {
+      // Build return object and only include the optional property when present
+      const resultObj: {
+        dimension: string;
+        finding: string;
+        confidence: number;
+        validationStatus: 'confirmed' | 'partially-confirmed' | 'unconfirmed' | 'contradicted';
+        supportingSources: string[];
+        consensusLevel: number;
+        contradictingSources?: string[];
+      } = {
         dimension: finding.dimension,
         finding: finding.finding,
         confidence: finding.confidence * consensusLevel, // Adjust confidence by consensus
         validationStatus,
         supportingSources: finding.supportingSources,
-        contradictingSources: contradictions.length > 0 ? contradictions : undefined,
         consensusLevel
       };
+
+      if (contradictions.length > 0) {
+        resultObj.contradictingSources = contradictions;
+      }
+
+      return resultObj;
     });
   }
 
@@ -276,9 +315,12 @@ export class SynthesisEngine {
     const findingLower = finding.toLowerCase();
 
     for (const result of results) {
-      // Get content from result data
-      const content = typeof result.data === 'string' ? result.data :
-                     (result.data)?.content ?? JSON.stringify(result.data);
+      // Get content from result data (safe type checks to avoid TS error on 'content')
+      const content = typeof result.data === 'string'
+        ? result.data
+        : (typeof result.data === 'object' && result.data !== null && 'content' in result.data && typeof (result.data as any).content === 'string')
+          ? (result.data as any).content
+          : JSON.stringify(result.data);
       const contentLower = content.toLowerCase();
 
       // Check for direct contradictions
@@ -420,12 +462,11 @@ ${sortedFindings.map(finding => {
     const agentTypes = new Set<string>();
 
     for (const result of results) {
-      // Get source types from sources
-      result.sources.forEach(source => sourceTypes.add(source.type));
+      // Get source types from sources (coerce to string)
+      result.sources.forEach(source => sourceTypes.add(String(source.type ?? 'unknown')));
 
-      // Get agent type from metadata or stepId pattern
-      const agentType = (result.metadata?.agentType ??
-                       result.stepId.split('-')[0]) ?? 'unknown';
+      // Get agent type from metadata or stepId pattern (coerce to string)
+      const agentType = String(result.metadata?.agentType ?? (result.stepId.split('-')[0]) ?? 'unknown');
       agentTypes.add(agentType);
     }
 
@@ -496,8 +537,9 @@ ${this.generateResearchRecommendations(findings, objectives)}
     contradictingSources?: string[];
     consensusLevel: number;
   }>): string {
+    const keyword = this.extractKeyword(objective);
     const relevantFindings = findings.filter(f =>
-      f.finding.toLowerCase().includes(objective.toLowerCase().split(' ')[0])
+      keyword.length > 0 && f.finding.toLowerCase().includes(keyword)
     );
 
     if (relevantFindings.length === 0) {
@@ -528,82 +570,30 @@ ${this.generateResearchRecommendations(findings, objectives)}
     objectives: string[]
   ): string {
     const recommendations: string[] = [];
-
+ 
     // Check for contradictory findings
     const contradictedFindings = findings.filter(f => f.validationStatus === 'contradicted');
     if (contradictedFindings.length > 0) {
       recommendations.push(`- Investigate ${contradictedFindings.length} contradictory findings requiring manual review`);
     }
-
+ 
     // Check for unconfirmed findings
     const unconfirmedFindings = findings.filter(f => f.validationStatus === 'unconfirmed');
     if (unconfirmedFindings.length > 0) {
       recommendations.push(`- Seek additional sources for ${unconfirmedFindings.length} unconfirmed findings`);
     }
-
+ 
     // Check objective coverage
-    const coveredObjectives = objectives.filter(obj =>
-      findings.some(f => f.finding.toLowerCase().includes(obj.toLowerCase().split(' ')[0]))
-    );
-
+    const coveredObjectives = objectives.filter(obj => {
+      const keyword = this.extractKeyword(obj);
+      return keyword.length > 0 && findings.some(f => f.finding.toLowerCase().includes(keyword));
+    });
+ 
     if (coveredObjectives.length < objectives.length) {
       recommendations.push(`- Expand research scope for ${objectives.length - coveredObjectives.length} uncovered objectives`);
     }
 
     return recommendations.length > 0 ? recommendations.join('\n') : '- No additional research recommended at this time';
-  }
-
-  /**
-   * Calculate overall research confidence
-   */
-  private calculateOverallConfidence(findings: Array<{
-    dimension: string;
-    finding: string;
-    confidence: number;
-    validationStatus: 'confirmed' | 'partially-confirmed' | 'unconfirmed' | 'contradicted';
-    supportingSources: string[];
-    contradictingSources?: string[];
-    consensusLevel: number;
-  }>): number {
-    if (findings.length === 0) {
-      return 0;
-    }
-
-    const totalConfidence = findings.reduce((sum, f) => sum + f.confidence, 0);
-    return Math.round((totalConfidence / findings.length) * 100);
-  }
-
-  /**
-   * Calculate confidence metrics
-   */
-  private calculateConfidenceMetrics(
-    results: ResearchStepResult[],
-    validatedFindings: Array<{
-      dimension: string;
-      finding: string;
-      confidence: number;
-      validationStatus: 'confirmed' | 'partially-confirmed' | 'unconfirmed' | 'contradicted';
-      supportingSources: string[];
-      contradictingSources?: string[];
-      consensusLevel: number;
-    }>
-  ): {
-    overallConfidence: number;
-    sourceDiversity: number;
-    validationRate: number;
-    contradictionRate: number;
-  } {
-    const overallConfidence = this.calculateOverallConfidence(validatedFindings);
-    const sourceDiversity = new Set(results.flatMap(r => r.sources.map(s => s.title || s.url))).size / results.length;
-    const validationRate = validatedFindings.filter(f => f.validationStatus === 'confirmed').length / validatedFindings.length;
-    const contradictionRate = validatedFindings.filter(f => f.validationStatus === 'contradicted').length / validatedFindings.length;
-
-    return {
-      overallConfidence,
-      sourceDiversity,
-      validationRate: validationRate || 0,
-      contradictionRate: contradictionRate || 0
-    };
   }
 
   /**
@@ -623,10 +613,14 @@ ${this.generateResearchRecommendations(findings, objectives)}
 
     // Check for objective coverage gaps
     for (const objective of objectives) {
+      const keyword = this.extractKeyword(objective);
       const relevantResults = results.filter((r): boolean => {
-        const content = typeof r.data === 'string' ? r.data :
-                       (r.data)?.content ?? JSON.stringify(r.data);
-        return content.toLowerCase().includes(objective.toLowerCase().split(' ')[0]);
+        const content = typeof r.data === 'string'
+          ? r.data
+          : (typeof r.data === 'object' && r.data !== null && 'content' in r.data && typeof (r.data as any).content === 'string')
+            ? (r.data as any).content
+            : JSON.stringify(r.data);
+        return keyword.length > 0 && content.toLowerCase().includes(keyword);
       });
 
       if (relevantResults.length === 0) {
@@ -634,8 +628,8 @@ ${this.generateResearchRecommendations(findings, objectives)}
       }
     }
 
-    // Check source diversity
-    const sourceTypes = new Set(results.flatMap(r => r.sources.map(s => s.type)));
+    // Check source diversity (coerce types to string)
+    const sourceTypes = new Set(results.flatMap(r => r.sources.map(s => String(s.type ?? 'unknown'))));
     if (sourceTypes.size < 3) {
       methodologicalLimitations.push('Limited source type diversity may affect result validity');
       recommendations.push('Incorporate additional source types (academic, news, government) in future research');
@@ -670,28 +664,173 @@ ${this.generateResearchRecommendations(findings, objectives)}
   } {
     const sourceTypes: Record<string, number> = {};
     const sourceContributions: Record<string, number> = {};
-
+ 
     for (const result of results) {
-      // Count source types from sources array
+      // Count source types from sources array (coerce to string)
       result.sources.forEach(source => {
-        sourceTypes[source.type] = (sourceTypes[source.type] || 0) + 1;
+        const typeKey = String(source.type ?? 'unknown');
+        sourceTypes[typeKey] = (sourceTypes[typeKey] || 0) + 1;
       });
-
+ 
       // Count contributions per source (use first source as identifier)
-      const sourceName = result.sources[0]?.title || result.sources[0]?.url || `Step ${result.stepId}`;
+      const sourceName = String(result.sources[0]?.title ?? result.sources[0]?.url ?? `Step ${result.stepId}`);
       sourceContributions[sourceName] = (sourceContributions[sourceName] || 0) + 1;
     }
-
+ 
     // Get top contributing sources
     const topSources = Object.entries(sourceContributions)
       .sort(([,a], [,b]) => b - a)
       .slice(0, 10)
       .map(([source, contributionCount]) => ({ source, contributionCount }));
-
+ 
     return {
       totalSources: results.length,
       sourceTypes,
       topSources
     };
+  }
+
+  /**
+   * Extract a safe keyword (first token) from a phrase.
+   * Always returns a string (possibly empty) to avoid undefined indexing issues.
+   */
+  private extractKeyword(phrase?: string): string {
+    if (!phrase) {
+      return '';
+    }
+    const parts = phrase.trim().toLowerCase().split(/\s+/);
+    // Return first token or empty string; use nullish coalescing to avoid 'undefined' type
+    return parts[0] ?? '';
+  }
+
+  /**
+   * Calculate overall confidence percentage for a set of findings.
+   * Returns a number in range 0-100 (one decimal place).
+   */
+  private calculateOverallConfidence(
+    findings: Array<{
+      dimension: string;
+      finding: string;
+      confidence: number;
+      validationStatus?: string;
+      supportingSources?: string[];
+      contradictingSources?: string[];
+      consensusLevel?: number;
+    }>
+  ): number {
+    if (!Array.isArray(findings) || findings.length === 0) {
+      return 0;
+    }
+
+    // Use the confidence values (expected to be in 0-1 range). If any missing, treat as 0.
+    const total = findings.reduce((sum, f) => sum + (typeof f.confidence === 'number' ? f.confidence : 0), 0);
+    const avg = total / findings.length;
+
+    // Convert to percentage and keep one decimal
+    return Number((avg * 100).toFixed(1));
+  }
+
+  /**
+   * Calculate confidence-related metrics used in the synthesis result.
+   */
+  private calculateConfidenceMetrics(
+    findings: Array<{
+      dimension: string;
+      finding: string;
+      confidence: number;
+      validationStatus: 'confirmed' | 'partially-confirmed' | 'unconfirmed' | 'contradicted';
+      supportingSources: string[];
+      contradictingSources?: string[];
+      consensusLevel: number;
+    }>
+  ): {
+    overallConfidence: number;
+    sourceDiversity: number;
+    validationRate: number;
+    contradictionRate: number;
+    averageConfidence: number;
+    medianConfidence: number;
+    byDimension: Record<string, number>;
+  } {
+    const metric: {
+      overallConfidence: number;
+      averageConfidence: number;
+      medianConfidence: number;
+      sourceDiversity: number;
+      validationRate: number;
+      contradictionRate: number;
+      byDimension: Record<string, number>;
+    } = {
+      overallConfidence: 0,
+      averageConfidence: 0,
+      medianConfidence: 0,
+      sourceDiversity: 0,
+      validationRate: 0,
+      contradictionRate: 0,
+      byDimension: {}
+    };
+
+    if (!Array.isArray(findings) || findings.length === 0) {
+      return metric;
+    }
+
+    // Normalize confidences (ensure numeric and within 0-1)
+    const confidences = findings.map(f => {
+      const c = typeof f.confidence === 'number' ? f.confidence : 0;
+      return Math.max(0, Math.min(1, c));
+    });
+
+    const sum = confidences.reduce((s, v) => s + v, 0);
+    const avg = sum / confidences.length;
+
+    // Median
+    const sorted = confidences.slice().sort((a, b) => a - b);
+    let median: number;
+    const mid = Math.floor(sorted.length / 2);
+    if (sorted.length % 2 === 0) {
+      // non-null assertions are safe here because sorted.length > 0 (findings checked above)
+      median = (sorted[mid - 1]! + sorted[mid]!) / 2;
+    } else {
+      median = sorted[mid]!;
+    }
+
+    // By-dimension averages
+    const byDimSums: Record<string, { sum: number; count: number }> = {};
+    for (const f of findings) {
+      const dim = String(f.dimension ?? 'general');
+      const c = typeof f.confidence === 'number' ? Math.max(0, Math.min(1, f.confidence)) : 0;
+      if (!byDimSums[dim]) {
+        byDimSums[dim] = { sum: 0, count: 0 };
+      }
+      byDimSums[dim].sum += c;
+      byDimSums[dim].count += 1;
+    }
+
+    const byDimension: Record<string, number> = {};
+    for (const [dim, { sum: s, count }] of Object.entries(byDimSums)) {
+      byDimension[dim] = Number(((s / count) * 100).toFixed(1)); // store as percentage with one decimal
+    }
+
+    metric.overallConfidence = this.calculateOverallConfidence(findings);
+    metric.averageConfidence = Number((avg * 100).toFixed(1));
+    metric.medianConfidence = Number((median * 100).toFixed(1));
+    metric.byDimension = byDimension;
+
+    // Calculate source diversity (unique sources across all findings)
+    const allSupportingSources = new Set<string>();
+    findings.forEach(f => f.supportingSources.forEach(s => allSupportingSources.add(s)));
+    metric.sourceDiversity = allSupportingSources.size;
+
+    // Calculate validation rate (percentage of confirmed findings)
+    const confirmedCount = findings.filter(f => f.validationStatus === 'confirmed').length;
+    metric.validationRate = findings.length > 0 ? Number(((confirmedCount / findings.length) * 100).toFixed(1)) : 0;
+
+    // Calculate contradiction rate (percentage of contradicted findings)
+    const contradictedCount = findings.filter(f => f.validationStatus === 'contradicted').length;
+    metric.contradictionRate = findings.length > 0 ? Number(((contradictedCount / findings.length) * 100).toFixed(1)) : 0;
+
+
+
+    return metric;
   }
 }

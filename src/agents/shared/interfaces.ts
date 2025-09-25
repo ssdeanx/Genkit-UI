@@ -199,6 +199,7 @@ export interface A2AMessage {
 }
 
 export interface TaskRequest {
+  step: any;
   taskId: string;
   type: string;
   parameters: Record<string, unknown>;

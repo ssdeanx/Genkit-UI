@@ -152,16 +152,17 @@ export class ResultAggregator {
     for (const result of results) {
       // Extract structured findings from result data
       if (result.data && typeof result.data === 'object') {
-        const data = result.data;
+        // Narrow to an indexable type so TypeScript allows property access
+        const data = result.data as Record<string, any>;
 
-        if (data.findings && Array.isArray(data.findings)) {
+        if (Array.isArray(data.findings)) {
           data.findings.forEach((finding: any, index: number) => {
             allFindings.push({
-              claim: finding.claim ?? finding.statement ?? `Finding ${index + 1}`,
-              evidence: finding.evidence ?? finding.explanation ?? '',
-              confidence: finding.confidence ?? result.qualityScore,
-              sourceIndices: finding.sourceIndices ?? [],
-              category: finding.category ?? 'factual',
+              claim: finding?.claim ?? finding?.statement ?? `Finding ${index + 1}`,
+              evidence: finding?.evidence ?? finding?.explanation ?? '',
+              confidence: finding?.confidence ?? result.qualityScore,
+              sourceIndices: finding?.sourceIndices ?? [],
+              category: finding?.category ?? 'factual',
               stepId: result.stepId
             });
           });
@@ -257,7 +258,13 @@ export class ResultAggregator {
 
       // Check if this finding is similar to any existing group
       for (const group of groups) {
-        if (this.areClaimsSimilar(finding.claim, group[0].claim)) {
+        // Ensure the group has at least one element and the first claim exists
+        if (group.length === 0) {
+          continue;
+        }
+
+        const firstClaim = group[0]?.claim;
+        if (firstClaim && this.areClaimsSimilar(finding.claim, firstClaim)) {
           group.push(finding);
           addedToGroup = true;
           break;
@@ -302,14 +309,16 @@ export class ResultAggregator {
       return '';
     }
     if (evidenceList.length === 1) {
-      return evidenceList[0];
+      // ensure we always return a string (avoid string | undefined)
+      return evidenceList[0] ?? '';
     }
 
     // Remove duplicates and very similar evidence
     const uniqueEvidence = this.deduplicateEvidence(evidenceList);
 
     if (uniqueEvidence.length === 1) {
-      return uniqueEvidence[0];
+      // ensure we always return a string (avoid string | undefined)
+      return uniqueEvidence[0] ?? '';
     }
 
     // Combine evidence with clear separation
@@ -375,7 +384,9 @@ export class ResultAggregator {
       return 0;
     }
     if (findings.length === 1) {
-      return findings[0].confidence;
+      // Safely handle the single-element case to avoid 'Object is possibly undefined'
+      const only = findings[0];
+      return typeof only?.confidence === 'number' ? only.confidence : 0;
     }
 
     // Use weighted average where higher confidence findings have more weight
@@ -518,7 +529,7 @@ export class ResultAggregator {
     }> = [];
 
     // Simple contradiction detection based on keyword opposites
-    const oppositePairs = [
+    const oppositePairs: [string, string][] = [
       ['increase', 'decrease'],
       ['positive', 'negative'],
       ['effective', 'ineffective'],
@@ -531,10 +542,21 @@ export class ResultAggregator {
         const finding1 = findings[i];
         const finding2 = findings[j];
 
+        // Guard: ensure both findings are defined (satisfies TS strict checks)
+        if (!finding1 || !finding2) {
+          continue;
+        }
+
         const text1 = (finding1.claim + ' ' + finding1.evidence).toLowerCase();
         const text2 = (finding2.claim + ' ' + finding2.evidence).toLowerCase();
 
-        for (const [word1, word2] of oppositePairs) {
+        for (const pair of oppositePairs) {
+          const [word1, word2] = pair;
+          // runtime guard to satisfy TypeScript strictness and avoid calling includes on undefined
+          if (!word1 || !word2) {
+            continue;
+          }
+
           if ((text1.includes(word1) && text2.includes(word2)) ||
               (text1.includes(word2) && text2.includes(word1))) {
             contradictions.push({

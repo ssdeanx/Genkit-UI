@@ -59,7 +59,8 @@ function extractCode(source: string): CodeMessageData {
   let inCodeBlock = false;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    // Ensure `line` is always a string to avoid "possibly undefined" errors.
+    const line = lines[i] ?? "";
     const trimmedLine = line.trim();
 
     if (trimmedLine.startsWith("```")) {
@@ -80,26 +81,39 @@ function extractCode(source: string): CodeMessageData {
       } else {
         // Ending a code block
         inCodeBlock = false;
-        // Mark the current file as done
-        files[files.length - 1].done = true;
-        // No need to reset currentPreamble here as it will be handled
-        // when we start the next code block or reach the end
+        // Mark the current file as done (guarded)
+        if (files.length > 0) {
+          const last = files[files.length - 1];
+          if (last) {
+            last.done = true;
+          }
+        }
       }
       continue;
     }
 
     if (inCodeBlock) {
-      // Add to the current file's content
-      files[files.length - 1].content += line + "\n";
-    } else {
-      // If we're past all code blocks and have content, this is postamble
-      if (files.length > 0 && files[files.length - 1].content) {
-        postamble += line + "\n";
-      } else {
-        // Otherwise this is preamble for the next file
-        currentPreamble += line + "\n";
-      }
-    }
+          // Add to the current file's content (guarded)
+          if (files.length > 0) {
+            const last = files[files.length - 1];
+            if (last) {
+              last.content += line + "\n";
+            }
+          }
+        }
+    else if (files.length > 0) {
+            const last = files[files.length - 1];
+            if (last && last.content) {
+              postamble += line + "\n";
+            } else {
+              // Otherwise this is preamble for the next file
+              currentPreamble += line + "\n";
+            }
+          }
+    else {
+            // No files yet; still preamble
+            currentPreamble += line + "\n";
+          }
   }
 
   return {

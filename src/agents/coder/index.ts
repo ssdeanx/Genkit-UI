@@ -1,21 +1,22 @@
 import express from "express";
 import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
 
-import { MessageData } from "genkit";
-import {
+import type { MessageData } from "genkit";
+import type {
   AgentCard,
   Task,
   TaskArtifactUpdateEvent,
   TaskState,
   TaskStatusUpdateEvent,
   TextPart,
+  Artifact, // <-- added Artifact type
 } from "@a2a-js/sdk";
 import {
   InMemoryTaskStore,
-  TaskStore,
-  AgentExecutor,
+  type TaskStore,
+  type AgentExecutor,
   RequestContext,
-  ExecutionEventBus,
+  type ExecutionEventBus,
   DefaultRequestHandler,
 } from "@a2a-js/sdk/server"; // Import server components
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
@@ -85,8 +86,10 @@ class CoderAgentExecutor implements AgentExecutor {
           timestamp: new Date().toISOString(),
         },
         history: [userMessage],
-        metadata: userMessage.metadata,
-        artifacts: [], // Initialize artifacts array
+        // Ensure metadata is always an object (Task expects a non-undefined object)
+        metadata: userMessage.metadata ?? {},
+        // Provide an explicitly typed empty Artifact[] to satisfy the Task type
+        artifacts: [] as Artifact[],
       };
       eventBus.publish(initialTask);
     }
@@ -168,6 +171,9 @@ class CoderAgentExecutor implements AgentExecutor {
       const fileOrder: string[] = []; // Store order of file appearance
       let emittedFileCount = 0;
 
+      // Helper that always returns a string (never undefined) for a filename.
+      const getFileContent = (fn: string): string => fileContents.get(fn) ?? "";
+
       for await (const chunk of stream) {
         const codeChunk = chunk.output as CodeMessage | undefined;
         if (!codeChunk?.files) {
@@ -187,7 +193,12 @@ class CoderAgentExecutor implements AgentExecutor {
               if (currentFileOrderIndex > 0 && emittedFileCount < currentFileOrderIndex) {
                 const prevFileIndex = currentFileOrderIndex - 1;
                 const prevFilename = fileOrder[prevFileIndex];
-                const prevFileContent = fileContents.get(prevFilename) ?? "";
+                if (!prevFilename) {
+                  // Skip if undefined to satisfy TS and avoid emitting invalid artifacts
+                  continue;
+                }
+                // Use helper so the value is always a string
+                const prevFileContent: string = getFileContent(prevFilename);
 
                 console.log(
                   `[CoderAgentExecutor] Emitting completed file artifact (index ${prevFileIndex}): ${prevFilename}`
@@ -197,7 +208,7 @@ class CoderAgentExecutor implements AgentExecutor {
                   taskId: taskId,
                   contextId: contextId,
                   artifact: {
-                    artifactId: prevFilename, // Using filename as artifactId for simplicity
+                    artifactId: prevFilename,
                     name: prevFilename,
                     parts: [{ kind: 'text', text: prevFileContent }],
                   },
@@ -228,12 +239,18 @@ class CoderAgentExecutor implements AgentExecutor {
             }
           }
         }
+
       }
 
       // After the loop, emit any remaining files that haven't been yielded
       for (let i = emittedFileCount; i < fileOrder.length; i++) {
         const filename = fileOrder[i];
-        const content = fileContents.get(filename) ?? "";
+        if (!filename) {
+          // Skip undefined indices; narrows type so artifactId/name are strings
+          continue;
+        }
+        // Use helper to guarantee a string
+        const content: string = getFileContent(filename);
         console.log(
           `[CoderAgentExecutor] Emitting final file artifact(index ${i}): ${filename} `
         );
@@ -334,8 +351,8 @@ const coderAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: undefined,
-  security: undefined,
+  securitySchemes: {},
+  security: [],
   defaultInputModes: ['text'],
   defaultOutputModes: ['text', 'file'], // 'file' implies artifacts
   skills: [

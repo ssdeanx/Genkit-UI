@@ -109,8 +109,7 @@ export class QualityValidator {
       return 0.5; // No comparable findings
     }
 
-    const averageConsistency = consistencyPairs.reduce((sum, pair) => sum + pair.consistency, 0) / consistencyPairs.length;
-    return averageConsistency;
+    return consistencyPairs.reduce((sum, pair) => sum + pair.consistency, 0) / consistencyPairs.length;
   }
 
   /**
@@ -120,7 +119,9 @@ export class QualityValidator {
     const findings = this.extractAllFindings(results);
     const sourcesPerFinding = findings.map(f => f.sources?.length || 0);
 
-    if (sourcesPerFinding.length === 0) return 0;
+    if (sourcesPerFinding.length === 0) {
+      return 0;
+    }
 
     const averageSources = sourcesPerFinding.reduce((sum, count) => sum + count, 0) / sourcesPerFinding.length;
     return Math.min(averageSources / 3, 1.0); // Normalize to 3+ sources = perfect score
@@ -131,14 +132,21 @@ export class QualityValidator {
    */
   private calculateRecencyScore(results: ResearchStepResult[]): number {
     const allSources = this.extractAllSources(results);
-    if (allSources.length === 0) return 0;
+    if (allSources.length === 0) {
+      return 0;
+    }
 
-    const recencyScores = allSources.map(source => {
+    // Ensure each mapped value is a definite number (fallback to 0)
+    const recencyScores: number[] = allSources.map(source => {
       const recencyCategory = this.categorizeRecency(source.accessedAt || new Date());
-      return this.recencyWeights[recencyCategory];
+      return this.recencyWeights[recencyCategory] ?? 0;
     });
 
-    return recencyScores.reduce((sum, score) => sum + score, 0) / recencyScores.length;
+    if (recencyScores.length === 0) {
+      return 0;
+    }
+    const sum = recencyScores.reduce((acc, score) => acc + score, 0);
+    return sum / recencyScores.length;
   }
 
   /**
@@ -218,10 +226,16 @@ export class QualityValidator {
 
     for (let i = 0; i < findings.length; i++) {
       for (let j = i + 1; j < findings.length; j++) {
-        const consistency = this.calculateFindingSimilarity(findings[i], findings[j]);
+        // Assign to local vars so TypeScript can narrow the type after the check
+        const f1 = findings[i];
+        const f2 = findings[j];
+        if (!f1 || !f2) {
+          continue;
+        }
+        const consistency = this.calculateFindingSimilarity(f1, f2);
         pairs.push({
-          finding1: findings[i],
-          finding2: findings[j],
+          finding1: f1,
+          finding2: f2,
           consistency
         });
       }
@@ -259,10 +273,18 @@ export class QualityValidator {
   private getRecencyMultiplier(accessDate: Date): number {
     const daysSinceAccess = (Date.now() - accessDate.getTime()) / (1000 * 60 * 60 * 24);
 
-    if (daysSinceAccess <= 7) return 1.0;      // Within 1 week
-    if (daysSinceAccess <= 30) return 0.9;     // Within 1 month
-    if (daysSinceAccess <= 180) return 0.7;    // Within 6 months
-    if (daysSinceAccess <= 365) return 0.4;    // Within 1 year
+    if (daysSinceAccess <= 7) {
+      return 1.0;
+    }      // Within 1 week
+    if (daysSinceAccess <= 30) {
+      return 0.9;
+    }     // Within 1 month
+    if (daysSinceAccess <= 180) {
+      return 0.7;
+    }    // Within 6 months
+    if (daysSinceAccess <= 365) {
+      return 0.4;
+    }    // Within 1 year
     return 0.2;                                // Over 1 year
   }
 
@@ -272,10 +294,18 @@ export class QualityValidator {
   private categorizeRecency(accessDate: Date): keyof typeof QualityValidator.prototype.recencyWeights {
     const daysSinceAccess = (Date.now() - accessDate.getTime()) / (1000 * 60 * 60 * 24);
 
-    if (daysSinceAccess <= 7) return 'current';
-    if (daysSinceAccess <= 30) return 'recent';
-    if (daysSinceAccess <= 180) return 'moderate';
-    if (daysSinceAccess <= 365) return 'old';
+    if (daysSinceAccess <= 7) {
+      return 'current';
+    }
+    if (daysSinceAccess <= 30) {
+      return 'recent';
+    }
+    if (daysSinceAccess <= 180) {
+      return 'moderate';
+    }
+    if (daysSinceAccess <= 365) {
+      return 'old';
+    }
     return 'outdated';
   }
 
@@ -303,19 +333,33 @@ export class QualityValidator {
   private countPresentElements(result: ResearchStepResult): number {
     let present = 0;
 
-    if (result.sources && result.sources.length > 0) present++;
-    if (result.qualityScore !== undefined && result.qualityScore >= 0) present++;
-    if (result.processingTime && result.processingTime > 0) present++;
-    if (result.metadata && Object.keys(result.metadata).length > 0) present++;
+    if (result.sources && result.sources.length > 0) {
+      present++;
+    }
+    if (result.qualityScore !== undefined && result.qualityScore >= 0) {
+      present++;
+    }
+    if (result.processingTime && result.processingTime > 0) {
+      present++;
+    }
+    if (result.metadata && Object.keys(result.metadata).length > 0) {
+      present++;
+    }
 
     // Count data elements
     if (result.data && typeof result.data === 'object') {
       const data = result.data as any;
       if (data.findings && Array.isArray(data.findings)) {
         data.findings.forEach((finding: any) => {
-          if (finding.claim) present++;
-          if (finding.evidence) present++;
-          if (finding.confidence !== undefined) present++;
+          if (finding.claim) {
+            present++;
+          }
+          if (finding.evidence) {
+            present++;
+          }
+          if (finding.confidence !== undefined) {
+            present++;
+          }
         });
       }
     }
@@ -329,7 +373,7 @@ export class QualityValidator {
   private identifyQualityIssues(
     results: ResearchStepResult[],
     qualityBreakdown: any,
-    orchestrationState: OrchestrationState
+    _orchestrationState: OrchestrationState
   ): QualityIssue[] {
     const issues: QualityIssue[] = [];
 
@@ -459,7 +503,7 @@ export class QualityValidator {
   } {
     const issues: string[] = [];
     const recommendations: string[] = [];
-    let credibilityScore = source.credibilityScore;
+    let {credibilityScore} = source;
 
     // Check source type credibility
     const typeWeight = this.credibilityWeights[source.type] || 0.5;
@@ -617,20 +661,21 @@ export class QualityValidator {
     }).filter(d => d);
 
     // Simple check: if most domains share the same TLD
-    const tlds = domains.map(d => d.split('.').pop()).filter((tld): tld is string => tld !== undefined && tld.length === 2);
+    const tlds = domains
+      .map(d => d.split('.').pop())
+      .filter((tld): tld is string => tld !== undefined && tld.length === 2);
+
     const tldCounts: Record<string, number> = {};
     tlds.forEach(tld => {
-      if (tldCounts.hasOwnProperty(tld)) {
-        tldCounts[tld] += 1;
-      } else {
-        tldCounts[tld] = 1;
-      }
+      // Use nullish-coalescing to avoid undefined when incrementing
+      tldCounts[tld] = (tldCounts[tld] ?? 0) + 1;
     });
 
-    const maxTldCount = Math.max(...Object.values(tldCounts));
+    const counts = Object.values(tldCounts);
+    const maxTldCount = counts.length > 0 ? Math.max(...counts) : 0;
     const totalDomains = domains.length;
 
-    if (totalDomains > 5 && (maxTldCount / totalDomains) > 0.7) {
+    if (totalDomains > 5 && counts.length > 0 && (maxTldCount / totalDomains) > 0.7) {
       // Over 70% from same geographic region
       const findings = this.extractAllFindings(results);
       return {

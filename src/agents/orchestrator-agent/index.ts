@@ -125,7 +125,8 @@ class OrchestratorAgentExecutor implements AgentExecutor {
           timestamp: new Date().toISOString(),
         },
         history: [userMessage],
-        metadata: userMessage.metadata,
+        // Ensure metadata is never undefined to satisfy Task type with strict optional typing
+        metadata: (userMessage.metadata ?? {}) as { [k: string]: unknown },
         artifacts: [],
       };
       eventBus.publish(initialTask);
@@ -576,8 +577,8 @@ const orchestratorAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: undefined,
-  security: undefined,
+  securitySchemes: {},
+  security: [],
   defaultInputModes: ['text'],
   defaultOutputModes: ['text'],
   skills: [

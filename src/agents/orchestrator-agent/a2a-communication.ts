@@ -54,7 +54,11 @@ export class A2ACommunicationManager {
         throw new Error(`Agent request failed: ${response.status} ${response.statusText}`);
       }
 
-      const taskResponse: TaskResponse = await response.json();
+      const raw = await response.json();
+      if (!isTaskResponse(raw)) {
+        throw new Error('Invalid TaskResponse received from agent');
+      }
+      const taskResponse: TaskResponse = raw;
 
       // Clear timeout and pending task
       clearTimeout(timeoutHandle);
@@ -204,8 +208,19 @@ export class MessageRouter {
   }
 
   private async handleCancel(message: A2AMessage): Promise<boolean> {
-    const { taskId } = message.payload;
-    return await this.communicationManager.cancelTask(taskId);
+    // Validate payload shape at runtime since message.payload is typed as unknown
+    const payload = message.payload as unknown;
+    if (typeof payload !== 'object' || payload === null) {
+      console.warn(`Cancel message from ${message.from} has invalid payload:`, payload);
+      return false;
+    }
+    const maybe = payload as { taskId?: unknown };
+    if (typeof maybe.taskId !== 'string') {
+      console.warn(`Cancel message from ${message.from} missing valid taskId:`, payload);
+      return false;
+    }
+
+    return await this.communicationManager.cancelTask(maybe.taskId);
   }
 
   private determineAgentType(taskRequest: TaskRequest): AgentType {
@@ -226,4 +241,24 @@ export class MessageRouter {
     // Default to web research for general tasks
     return 'web-research';
   }
+}
+
+/**
+ * Lightweight runtime validator for TaskResponse
+ * Adjust the checks here if TaskResponse shape changes (e.g. add artifact checks)
+ */
+function isTaskResponse(obj: unknown): obj is TaskResponse {
+  if (typeof obj !== 'object' || obj === null) {
+    return false;
+  }
+  const anyObj = obj as any;
+  // Basic required shape checks - adjust fields to match your TaskResponse interface
+  if (typeof anyObj.taskId !== 'string') {
+    return false;
+  }
+  if (typeof anyObj.status !== 'string' && typeof anyObj.status !== 'object') {
+    // allow string statuses or structured status objects depending on your interface
+    return false;
+  }
+  return true;
 }

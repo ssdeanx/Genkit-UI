@@ -1,4 +1,4 @@
-import { ResearchStep, ResearchStepExecution, TaskRequest, AgentType, OrchestrationState } from '../shared/interfaces.js';
+import type { ResearchStep, ResearchStepExecution, TaskRequest, AgentType, OrchestrationState } from '../shared/interfaces.js';
 import { A2ACommunicationManager } from './a2a-communication.js';
 
 /**
@@ -51,8 +51,12 @@ export class TaskDelegator {
 
     return allSteps.filter(step => {
       // Check if step is already completed or active
-      if (completedStepIds.has(step.id)) return false;
-      if (this.activeTasks.has(step.id)) return false;
+      if (completedStepIds.has(step.id)) {
+        return false;
+      }
+      if (this.activeTasks.has(step.id)) {
+        return false;
+      }
 
       // Check if all dependencies are satisfied
       return step.dependencies.every(depId => completedStepIds.has(depId));
@@ -155,22 +159,20 @@ export class TaskDelegator {
   private createTaskRequest(
     step: ResearchStep,
     orchestrationState: OrchestrationState
-  ): TaskRequest {
-    const taskParameters = this.extractTaskParameters(step, orchestrationState);
-
-    return {
-      taskId: `task-${step.id}-${Date.now()}`,
-      type: this.mapStepToTaskType(step),
-      parameters: taskParameters,
-      priority: step.priority,
-      timeout: step.estimatedDuration * 60000, // Convert minutes to milliseconds
-      metadata: {
-        stepId: step.id,
-        researchId: orchestrationState.researchId,
-        topic: orchestrationState.plan.topic,
-        successCriteria: step.successCriteria
-      }
-    };
+  ): TaskRequest {const taskParameters = this.extractTaskParameters(step, orchestrationState);return {taskId: `task-${step.id}-${Date.now()}`,
+  type: this.mapStepToTaskType(step),
+  parameters: taskParameters,
+  // The 'step' property is required by TaskRequest
+  step: step,
+  priority: step.priority,
+  timeout: step.estimatedDuration * 60000, // Convert minutes to milliseconds
+  metadata: {
+    stepId: step.id,
+    researchId: orchestrationState.researchId,
+    topic: orchestrationState.plan.topic,
+    successCriteria: step.successCriteria
+  }
+};
   }
 
   /**
@@ -241,22 +243,36 @@ export class TaskDelegator {
 
     switch (agentType) {
       case 'web-research':
-        if (description.includes('comprehensive')) return 'comprehensive-web-search';
-        if (description.includes('fact-check')) return 'fact-checking';
+        if (description.includes('comprehensive')) {
+          return 'comprehensive-web-search';
+        }
+        if (description.includes('fact-check')) {
+          return 'fact-checking';
+        }
         return 'general-web-research';
 
       case 'academic-research':
-        if (description.includes('literature review')) return 'literature-review';
-        if (description.includes('citation analysis')) return 'citation-analysis';
+        if (description.includes('literature review')) {
+          return 'literature-review';
+        }
+        if (description.includes('citation analysis')) {
+          return 'citation-analysis';
+        }
         return 'academic-search';
 
       case 'news-research':
-        if (description.includes('trend')) return 'news-trend-analysis';
+        if (description.includes('trend')) {
+          return 'news-trend-analysis';
+        }
         return 'current-events-research';
 
       case 'data-analysis':
-        if (description.includes('visualize')) return 'data-visualization';
-        if (description.includes('correlation')) return 'correlation-analysis';
+        if (description.includes('visualize')) {
+          return 'data-visualization';
+        }
+        if (description.includes('correlation')) {
+          return 'correlation-analysis';
+        }
         return 'statistical-analysis';
 
       default:
@@ -271,7 +287,7 @@ export class TaskDelegator {
     step: ResearchStep,
     orchestrationState: OrchestrationState
   ): string[] {
-    const topic = orchestrationState.plan.topic;
+    const {topic} = orchestrationState.plan;
     const description = step.description.toLowerCase();
 
     const queries = [topic];
@@ -327,16 +343,24 @@ export class TaskDelegator {
     step: ResearchStep,
     orchestrationState: OrchestrationState
   ): string[] {
-    const dataSources = orchestrationState.plan.dataSources;
+    const {dataSources} = orchestrationState.plan;
     const description = step.description.toLowerCase();
 
     // Filter data sources based on step requirements
     return dataSources
       .filter(source => {
-        if (description.includes('statistical') && source.type === 'statistical') return true;
-        if (description.includes('government') && source.type === 'government') return true;
-        if (description.includes('academic') && source.type === 'academic') return true;
-        if (description.includes('news') && source.type === 'news') return true;
+        if (description.includes('statistical') && source.type === 'statistical') {
+          return true;
+        }
+        if (description.includes('government') && source.type === 'government') {
+          return true;
+        }
+        if (description.includes('academic') && source.type === 'academic') {
+          return true;
+        }
+        if (description.includes('news') && source.type === 'news') {
+          return true;
+        }
         return source.type === 'statistical' || source.type === 'government'; // Default to quantitative sources
       })
       .map(source => source.type);
@@ -378,7 +402,9 @@ export class TaskDelegator {
    */
   async cancelTask(stepId: string): Promise<boolean> {
     const execution = this.activeTasks.get(stepId);
-    if (!execution) return false;
+    if (!execution) {
+      return false;
+    }
 
     try {
       // Cancel through A2A manager (would need to be implemented)

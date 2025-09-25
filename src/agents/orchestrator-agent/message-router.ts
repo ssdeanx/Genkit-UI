@@ -1,5 +1,5 @@
 import type { OrchestrationState, A2AMessage } from '../shared/interfaces.js';
-import { ResearchStepExecution, TaskResponse } from '../shared/interfaces.js';
+import type { ResearchStepExecution, TaskResponse, TaskRequest } from '../shared/interfaces.js';
 import type { TaskDelegator } from './task-delegator.js';
 
 /**
@@ -72,12 +72,17 @@ export class MessageRouter {
     const success = results.some(r => r.success);
     const errors = results.filter(r => !r.success).map(r => r.error);
 
-    return {
+    const routingResult: RoutingResult = {
       success,
       messageId: message.id,
-      results,
-      error: errors.length > 0 ? errors.join('; ') : undefined
+      results
     };
+
+    if (errors.length > 0) {
+      routingResult.error = errors.join('; ');
+    }
+
+    return routingResult;
   }
 
   /**
@@ -154,7 +159,7 @@ export class MessageRouter {
   /**
    * Send message to agent (placeholder for actual A2A transport)
    */
-  private async sendMessageToAgent(message: A2AMessage, agent: AgentInfo): Promise<any> {
+  private async sendMessageToAgent(message: A2AMessage, _agent: AgentInfo): Promise<any> {
     // This would be replaced with actual A2A communication
     // For now, simulate agent response based on message type
 
@@ -162,7 +167,8 @@ export class MessageRouter {
       case 'task-request':
         // For task requests, we would delegate through the task delegator
         // Since delegateStep is private, we'll simulate the delegation
-        return { status: 'delegated', taskId: message.payload?.taskId };
+        const payload = message.payload as TaskRequest;
+        return { status: 'delegated', taskId: payload.taskId };
 
       case 'status-update':
         return { status: 'acknowledged' };
@@ -236,7 +242,7 @@ export class MessageRouter {
 
     // For task execution messages, route to appropriate agent types
     if (message.type === 'task-request') {
-      const step = message.payload?.step;
+      const step = (message.payload as TaskRequest)?.step;
       if (step) {
         const { agentType } = step;
         const agents = Array.from(this.agentRegistry.values())

@@ -1,4 +1,4 @@
-import { OrchestrationState, ResearchStepExecution, ProgressUpdate, A2AMessage } from '../shared/interfaces.js';
+import type { OrchestrationState, ResearchStepExecution, ProgressUpdate, A2AMessage } from '../shared/interfaces.js';
 
 /**
  * Streaming Handler for the Orchestrator Agent
@@ -150,8 +150,9 @@ export class StreamingHandler {
       return;
     }
 
-    const { payload } = message;
-    if (!payload?.researchId || !payload?.stepId) {
+    // Cast payload to a flexible shape and perform a runtime guard to safely access properties
+    const payload = message.payload as Record<string, any> | undefined;
+    if (!payload || typeof payload !== 'object' || !payload.researchId || !payload.stepId) {
       return;
     }
 

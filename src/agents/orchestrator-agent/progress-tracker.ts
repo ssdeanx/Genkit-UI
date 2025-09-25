@@ -272,7 +272,7 @@ export class ProgressTracker {
     const timeline = history.slice(-10).map(update => ({
       timestamp: update.timestamp,
       activity: update.currentActivity,
-      percentage: update.percentage
+      ...(update.percentage !== undefined && { percentage: update.percentage })
     }));
 
     const issues = orchestrationState.issues

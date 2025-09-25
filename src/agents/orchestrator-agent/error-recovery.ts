@@ -449,7 +449,8 @@ export class ErrorRecovery {
       severity,
       description,
       affectedSteps: affectedSteps ?? [stepId],
-      resolution,
+      // Ensure resolution is always a string (avoid `undefined`) to satisfy exactOptionalPropertyTypes
+      resolution: resolution ?? '',
       createdAt: new Date()
     };
   }

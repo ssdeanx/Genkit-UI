@@ -1,7 +1,7 @@
 import express from "express";
 import { v4 as uuidv4 } from "uuid"; // For generating unique IDs
 
-import {
+import type {
   AgentCard,
   Task,
   TaskStatusUpdateEvent,
@@ -10,14 +10,14 @@ import {
 } from "@a2a-js/sdk";
 import {
   InMemoryTaskStore,
-  TaskStore,
-  AgentExecutor,
+  type TaskStore,
+  type AgentExecutor,
   RequestContext,
-  ExecutionEventBus,
+  type ExecutionEventBus,
   DefaultRequestHandler,
 } from "@a2a-js/sdk/server"; // Import server components
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
-import { MessageData } from "genkit";
+import type { MessageData } from "genkit";
 import { ai } from "./genkit.js";
 
 import * as dotenv from "dotenv";
@@ -64,7 +64,7 @@ class ContentEditorAgentExecutor implements AgentExecutor {
     requestContext: RequestContext,
     eventBus: ExecutionEventBus,
   ): Promise<void> {
-    const userMessage = requestContext.userMessage;
+    const {userMessage} = requestContext;
     const existingTask = requestContext.task;
 
     const taskId = existingTask?.id || uuidv4();
@@ -85,7 +85,8 @@ class ContentEditorAgentExecutor implements AgentExecutor {
           timestamp: new Date().toISOString(),
         },
         history: [userMessage],
-        metadata: userMessage.metadata,
+        // Ensure metadata is never undefined to satisfy Task type
+        metadata: userMessage.metadata ?? {},
       };
       eventBus.publish(initialTask);
     }
@@ -257,8 +258,10 @@ const contentEditorAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: false,
   },
-  securitySchemes: undefined,
-  security: undefined,
+  // Provide the expected typed shapes (empty objects) instead of `undefined`
+  // to satisfy exactOptionalPropertyTypes and AgentCard typings.
+  securitySchemes: {},
+  security: [],
   defaultInputModes: ["text"],
   defaultOutputModes: ["text"],
   skills: [
@@ -275,7 +278,7 @@ const contentEditorAgentCard: AgentCard = {
     },
   ],
   supportsAuthenticatedExtendedCard: false,
-  protocolVersion: ""
+  protocolVersion: "1.0",
 };
 
 async function main() {
