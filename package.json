@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest",
     "genkit:ui": "dotenvx run -- genkit start -- npx tsx --watch src/index.ts"
   },
   "keywords": [],

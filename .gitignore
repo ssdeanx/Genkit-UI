@@ -24,3 +24,5 @@ coverage
 
 .DS_Store
 .genkit/
+.gemini/
+gha-creds-*.json
