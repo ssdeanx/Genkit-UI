@@ -1,0 +1,43 @@
+{
+  "name": "my-genkit-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "genkit:ui": "dotenvx run -- genkit start -- npx tsx --watch src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@dotenvx/dotenvx": "^1.51.0",
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.5.2",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.44.1",
+    "@typescript-eslint/parser": "^8.44.1",
+    "eslint": "^9.36.0",
+    "genkit": "^1.19.3",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@genkit-ai/core": "^1.19.3",
+    "@genkit-ai/dev-local-vectorstore": "^1.19.3",
+    "@genkit-ai/dotprompt": "^0.9.12",
+    "@genkit-ai/express": "^1.19.3",
+    "@genkit-ai/firebase": "^1.19.3",
+    "@genkit-ai/google-cloud": "^1.19.3",
+    "@genkit-ai/google-genai": "^1.19.3",
+    "@genkit-ai/mcp": "^1.19.3",
+    "@genkit-ai/telemetry-server": "^1.19.3",
+    "@genkit-ai/tools-common": "^1.19.3",
+    "@genkit-ai/vertexai": "^1.19.3",
+    "uuid": "^13.0.0",
+    "zod": "^4.1.11"
+  }
+}
