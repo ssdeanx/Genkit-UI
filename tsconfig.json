@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "rootDir": "./src",
+    "rootDir": ".",
     "module": "NodeNext",
     "target": "esnext",
     "lib": [
@@ -22,5 +22,16 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-  }
+  },
+  "include": [
+    "src/**/*.ts",
+    "eslint.config.js",
+    "prettier.config.js",
+    "genkit.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".github"
+  ]
 }
