@@ -199,7 +199,7 @@ export interface A2AMessage {
 }
 
 export interface TaskRequest {
-  step: any;
+  step: ResearchStep;
   taskId: string;
   type: string;
   parameters: Record<string, unknown>;

@@ -408,7 +408,7 @@ export class StepDecomposer {
       // Walk backwards through dependencies
       let currentDeps = finalStep.dependencies;
       while (currentDeps.length > 0) {
-        const nextStepId = currentDeps[0]; // Take first dependency
+        const nextStepId = currentDeps[0]!; // Assert non-null since length > 0
         const nextStep = stepMap.get(nextStepId);
         if (nextStep) {
           criticalPath.unshift(nextStep);

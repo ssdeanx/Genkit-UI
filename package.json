@@ -52,6 +52,7 @@
     "dotenv": "^17.2.2",
     "eslint-config-prettier": "^10.1.8",
     "firebase": "^12.3.0",
+    "pino-pretty": "^13.1.1",
     "prettier": "^3.6.2",
     "prisma": "^6.16.2",
     "serpapi": "^2.2.1",

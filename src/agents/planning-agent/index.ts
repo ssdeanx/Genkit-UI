@@ -1,6 +1,6 @@
 import express from "express";
 import { v4 as uuidv4 } from 'uuid';
-import { z } from 'zod';  // Added import for Zod schemas
+import { z, type ZodTypeAny } from 'zod';  // Added import for Zod schemas and ZodTypeAny
 
 import type { MessageData } from "genkit";
 import type {
@@ -71,34 +71,65 @@ export class ResearchPlanner {
       const queryAnalysis = this.queryAnalyzer.analyzeQuery(query);
       console.log(`ResearchPlanner: Query analysis complete. Dimensions: ${queryAnalysis.researchDimensions.length}`);
 
+     // Ensure QueryAnalysis includes a timeline (required by generateComprehensivePlan)
+     // If the analyzer omitted timeline, provide a sensible default.
+     const queryAnalysisWithTimeline: QueryAnalysis = {
+       ...(queryAnalysis as any),
+       timeline: (queryAnalysis as any).timeline ?? 'unspecified',
+     };
+      
       // Step 2: Select appropriate research methodologies
       console.log("ResearchPlanner: Selecting methodologies...");
-      const methodologies = [this.methodologySelector.selectMethodology(queryAnalysis, "")];
+      const methodologies = [this.methodologySelector.selectMethodology(queryAnalysisWithTimeline, "")];
       console.log(`ResearchPlanner: Selected ${methodologies.length} methodologies`);
+
+     // Ensure we have a valid methodology object with a stable 'approach' field.
+     // This avoids "Object is possibly 'undefined'." when accessing methodologies[0].approach.
+     const chosenMethodology: ResearchMethodology = methodologies[0] ?? { approach: 'exploratory', justification: '', phases: [], qualityControls: [] };
 
       // Step 3: Identify and prioritize data sources
       console.log("ResearchPlanner: Identifying data sources...");
-      const dataSources = this.dataSourceIdentifier.identifyDataSources(queryAnalysis.researchDimensions, methodologies[0].approach, queryAnalysis.coreQuestion);
+      const dataSources = this.dataSourceIdentifier.identifyDataSources(queryAnalysis.researchDimensions, chosenMethodology.approach, queryAnalysis.coreQuestion);
       console.log(`ResearchPlanner: Identified ${dataSources.length} data sources`);
 
       // Step 4: Decompose research into executable steps
       console.log("ResearchPlanner: Decomposing into steps...");
-      const researchSteps = this.stepDecomposer.decomposeIntoSteps(queryAnalysis.coreQuestion, methodologies[0].approach, dataSources, queryAnalysis.researchDimensions, queryAnalysis.estimatedScope);
+      const researchSteps = this.stepDecomposer.decomposeIntoSteps(queryAnalysis.coreQuestion, chosenMethodology.approach, dataSources, queryAnalysis.researchDimensions, queryAnalysis.estimatedScope);
       console.log(`ResearchPlanner: Created ${researchSteps.length} research steps`);
 
       // Step 5: Assess risks and create mitigation strategies
       console.log("ResearchPlanner: Assessing risks...");
-      const riskAssessment = this.riskAssessor.assessRisks(queryAnalysis.coreQuestion, dataSources, researchSteps, queryAnalysis.estimatedScope || 'unknown', methodologies[0].approach);
-      console.log(`ResearchPlanner: Identified ${riskAssessment.risks.length} risk factors`);
+      // The assessor may return either an array of RiskFactor or an object { risks, contingencyPlans }.
+      // Normalize to an array of risk factors so downstream code has a consistent shape.
+      const riskAssessmentRaw = this.riskAssessor.assessRisks(
+        queryAnalysis.coreQuestion,
+        dataSources,
+        researchSteps,
+        queryAnalysis.estimatedScope || 'unknown',
+        chosenMethodology.approach
+      );
+      const riskFactors = Array.isArray(riskAssessmentRaw)
+        ? riskAssessmentRaw
+        : (riskAssessmentRaw?.risks ?? []);
+      console.log(`ResearchPlanner: Identified ${riskFactors.length} risk factors`);
 
       // Step 6: Create contingency plans
       console.log("ResearchPlanner: Creating contingency plans...");
-      const contingencyPlans = this.contingencyPlanner.createContingencyPlans(riskAssessment.risks, dataSources, researchSteps, queryAnalysis.coreQuestion);
+      const contingencyPlans = this.contingencyPlanner.createContingencyPlans(riskFactors, dataSources, researchSteps, queryAnalysis.coreQuestion);
       console.log(`ResearchPlanner: Created ${contingencyPlans.length} contingency plans`);
 
       // Step 7: Generate comprehensive research plan using Genkit
       console.log("ResearchPlanner: Generating final research plan...");
-      const finalPlan = await this.generateComprehensivePlan(query, queryAnalysis, methodologies, dataSources, researchSteps, riskAssessment, contingencyPlans);
+      const finalPlan = await this.generateComprehensivePlan(
+        query,
+        queryAnalysisWithTimeline,
+        methodologies,
+        dataSources,
+        researchSteps,
+        // pass normalized RiskFactor[] (ResearchPlan['riskAssessment'])
+        riskFactors,
+        contingencyPlans
+      );
 
       console.log("ResearchPlanner: Research planning complete!");
       return finalPlan;
@@ -124,33 +155,38 @@ export class ResearchPlanner {
     const comprehensivePlanPrompt = ai.definePrompt({
       name: "comprehensive-research-planning",
       input: {
-        schema: z.object({  // Updated to use Zod schema
+        // Use explicit Zod shapes; allow extra properties via record
+        schema: z.object({
           query: z.string(),
-          analysis: z.object({}).passthrough(),  // Allow flexible object for analysis
-          methodologies: z.array(z.any()),
-          dataSources: z.array(z.any()),
-          steps: z.array(z.any()),
-          risks: z.array(z.any()), // <- changed from z.object().passthrough() to accept RiskFactor[] 
-          contingencies: z.array(z.any())
+          analysis: z.record(z.string(), z.unknown()),
+          methodologies: z.array(z.record(z.string(), z.unknown())),
+          dataSources: z.array(z.record(z.string(), z.unknown())),
+          steps: z.array(z.record(z.string(), z.unknown())),
+          risks: z.array(z.record(z.string(), z.unknown())),
+          contingencies: z.array(z.record(z.string(), z.unknown()))
         })
       },
       output: {
-        schema: z.object({  // Updated to use Zod schema
+        // Use explicit Zod shapes; allow extra fields via catchall/record
+        schema: z.object({
           title: z.string(),
           objective: z.string(),
           methodology: z.string(),
           dataSources: z.array(z.string()),
-          executionSteps: z.array(z.object({
-            id: z.string(),
-            description: z.string(),
-            agent: z.string(),
-            dependencies: z.array(z.string()),
-            estimatedDuration: z.number(),
-            priority: z.string()
-          })),
-          riskMitigation: z.object({}).passthrough(),  // Allow flexible object
-          timeline: z.object({}).passthrough()  // Allow flexible object
-        })
+          executionSteps: z.array(
+            z.object({
+              id: z.string(),
+              description: z.string(),
+              agent: z.string(),
+              dependencies: z.array(z.string()),
+              estimatedDuration: z.number(),
+              priority: z.string()
+            }).catchall(z.unknown())
+          ),
+          riskMitigation: z.record(z.string(), z.unknown()),
+          // accept timeline as either string or a loose object
+          timeline: z.union([z.string(), z.record(z.string(), z.unknown())])
+        }) as ZodTypeAny
       },
       prompt: `
 You are an expert research strategist. Based on the comprehensive analysis provided, create a detailed research execution plan.

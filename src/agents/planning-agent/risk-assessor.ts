@@ -235,23 +235,25 @@ export class RiskAssessor {
     const totalEstimatedTime = executionSteps.reduce((sum, step) => sum + step.estimatedDuration, 0);
 
     // Parse estimated timeline
-    const timelineMatch = estimatedTimeline.match(/(\d+)\s*(hour|day|week)/i);
+    const timelineMatch = /(\d+)\s*(hour|day|week)/i.exec(estimatedTimeline);
     let timelineHours = 0;
 
     if (timelineMatch) {
       const [, timeValue, timeUnit] = timelineMatch;
-      const value = parseInt(timeValue);
+      if (timeValue && timeUnit) {
+        const value = parseInt(timeValue);
 
-      switch (timeUnit.toLowerCase()) {
-        case 'hour':
-          timelineHours = value;
-          break;
-        case 'day':
-          timelineHours = value * 24;
-          break;
-        case 'week':
-          timelineHours = value * 24 * 7;
-          break;
+        switch (timeUnit.toLowerCase()) {
+          case 'hour':
+            timelineHours = value;
+            break;
+          case 'day':
+            timelineHours = value * 24;
+            break;
+          case 'week':
+            timelineHours = value * 24 * 7;
+            break;
+        }
       }
     }
 

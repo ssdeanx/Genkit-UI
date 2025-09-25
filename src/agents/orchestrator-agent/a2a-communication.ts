@@ -182,6 +182,7 @@ export class MessageRouter {
         return await this.handleError(message);
       case 'cancel':
         return await this.handleCancel(message);
+      case "task-response": { throw new Error('Not implemented yet: "task-response" case') }
       default:
         throw new Error(`Unknown message type: ${message.type}`);
     }
@@ -209,7 +210,7 @@ export class MessageRouter {
 
   private async handleCancel(message: A2AMessage): Promise<boolean> {
     // Validate payload shape at runtime since message.payload is typed as unknown
-    const payload = message.payload as unknown;
+    const {payload} = message;
     if (typeof payload !== 'object' || payload === null) {
       console.warn(`Cancel message from ${message.from} has invalid payload:`, payload);
       return false;

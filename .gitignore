@@ -26,3 +26,4 @@ coverage
 .genkit/
 .gemini/
 gha-creds-*.json
+.github/prompts/*.md

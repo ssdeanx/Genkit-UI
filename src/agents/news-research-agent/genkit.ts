@@ -17,5 +17,3 @@ export const ai = genkit({
   }),
   promptDir: dirname(fileURLToPath(import.meta.url)),
 });
-
-export { z } from "genkit";

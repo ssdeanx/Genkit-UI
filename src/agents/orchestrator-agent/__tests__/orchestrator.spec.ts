@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OrchestratorAgentExecutor } from '../index.js';
 import type { OrchestrationState, OrchestrationDecision, ResearchPlan, OrchestrationIssue } from '../../shared/interfaces.js';
-import { TaskDelegator } from '../task-delegator.js';
+import { TaskDelegator } from '../task-delegator.js'; // Ensure TaskDelegator is imported
 import { A2ACommunicationManager } from '../a2a-communication.js';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
 import { v4 as uuidv4 } from 'uuid';
-import { ai } from 'genkit';
+import { ai } from '../genkit.js';
 
 // Mock dependencies
 vi.mock('../task-delegator.js');
@@ -20,8 +20,20 @@ const mockTaskDelegator = vi.mocked(new TaskDelegator(new A2ACommunicationManage
 const mockA2aManager = vi.mocked(new A2ACommunicationManager() as any);
 const mockEventBus = { publish: vi.fn() } as unknown as ExecutionEventBus;
 const mockRequestContext = {
-  userMessage: { messageId: 'msg1', role: 'user', parts: [{ kind: 'text', text: 'Test query' }], contextId: 'ctx1' },
-  task: undefined,
+  taskId: 'task1',
+  contextId: 'ctx1',
+  // Explicitly cast userMessage to unknown first to satisfy TypeScript's strict type checking
+  // when converting to RequestContext, as the original type definition for Message
+  // in @a2a-js/sdk might have additional properties like 'kind' that are not
+  // explicitly defined in the mock object.
+  userMessage: {
+    kind: 'message', // Added 'kind' property to match Message interface
+    messageId: 'msg1',
+    role: 'user',
+    parts: [{ kind: 'text', text: 'Test query' }],
+    contextId: 'ctx1'
+  } as unknown as RequestContext['userMessage'],
+  task: undefined as unknown as RequestContext['task'],
 } as RequestContext;
 
 describe('OrchestratorAgentExecutor', () => {
@@ -70,7 +82,7 @@ describe('OrchestratorAgentExecutor', () => {
         researchId: 'test',
         timestamp: new Date().toISOString(),
         currentPhase: 'execution',
-        activeTasks: [{ taskId: '1', agentType: 'web-research' as const, status: 'running' }],
+        activeTasks: [{ taskId: '1', agentType: 'web-research' as const, description: 'Web research task', priority: 1, estimatedDuration: 5 }],
         completedTasks: ['2'],
         issues: [{ type: 'timeout' as const, severity: 'high', description: 'Test issue', affectedTasks: [] }],
         progressMetrics: { completedSteps: 1, totalSteps: 2, estimatedTimeRemaining: 5, overallConfidence: 0.9, qualityScore: 0.8 },
@@ -82,7 +94,7 @@ describe('OrchestratorAgentExecutor', () => {
       expect(state.currentPhase).toBe('execution');
       expect(state.progress.completedSteps).toBe(1);
       expect(state.issues.length).toBe(1);
-      expect(state.issues[0].type).toBe('timeout');
+      expect(state.issues[0]!.type).toBe('timeout');
     });
 
     it('should cancel task and update state', async () => {
@@ -95,26 +107,28 @@ describe('OrchestratorAgentExecutor', () => {
     });
 
     it('should loop up to max cycles and complete', async () => {
-      vi.mocked(ai.prompt).mockResolvedValue({ text: JSON.stringify({ orchestrationDecision: { nextActions: [{ action: 'continue' }], activeTasks: [], issues: [], progressMetrics: { completedSteps: 0, totalSteps: 1, estimatedTimeRemaining: 10, overallConfidence: 0.8, qualityScore: 0.8 } } }) });
+      vi.mocked(ai.prompt).mockResolvedValue({ text: JSON.stringify({ orchestrationDecision: { nextActions: [{ action: 'continue' }], activeTasks: [], issues: [], progressMetrics: { completedSteps: 0, totalSteps: 1, estimatedTimeRemaining: 10, overallConfidence: 0.8, qualityScore: 0.8 } } }) } });
 
       await executor.execute(mockRequestContext, mockEventBus);
 
       // Expect multiple publishes for cycles
-      const publishCalls = mockEventBus.publish.mock.calls.length;
+      const publishCalls = vi.mocked(mockEventBus.publish).mock.calls.length;
       expect(publishCalls).toBeGreaterThan(3); // Initial + at least one cycle + final
     });
   });
 
   describe('parseOrchestrationDecision', () => {
     it('should parse valid JSON', () => {
+      const executor = new OrchestratorAgentExecutor(mockTaskDelegator, mockA2aManager);
       const text = JSON.stringify({ orchestrationDecision: { currentPhase: 'test' } });
-      const result = executor['parseOrchestrationDecision'](text);
+      const result = (executor as any).parseOrchestrationDecision(text);
 
       expect(result.currentPhase).toBe('test');
     });
 
     it('should use fallback on invalid JSON', () => {
-      const result = executor['parseOrchestrationDecision']('invalid');
+      const executor = new OrchestratorAgentExecutor(mockTaskDelegator, mockA2aManager);
+      const result = (executor as any)['parseOrchestrationDecision']('invalid');
 
       expect(result.currentPhase).toBe('execution');
       expect(result.nextActions).toHaveLength(1);

@@ -20,22 +20,18 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
-    "allowUnionTypes": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-    "exclude": [
-      "node_modules",
-      "dist",
-      "test",
-      "scripts",
-      "**/*.test.ts",
-      "**/*.test.tsx",
-      "**/*.spec.ts",
-      "**/*.spec.tsx",
-      "**/*.d.ts",
-      "**/__tests__",
-      "**/__mocks__",
-      ".genkit"
-    ],
-  }
+  },
+  "include": [
+    "src/**/*.ts",
+    "eslint.config.js",
+    "prettier.config.js",
+    "genkit.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".github"
+  ]
 }

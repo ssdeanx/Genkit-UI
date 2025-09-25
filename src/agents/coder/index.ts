@@ -11,20 +11,21 @@ import type {
   TextPart,
   Artifact, // <-- added Artifact type
 } from "@a2a-js/sdk";
+import type {
+  RequestContext} from "@a2a-js/sdk/server";
 import {
   InMemoryTaskStore,
   type TaskStore,
   type AgentExecutor,
-  RequestContext,
   type ExecutionEventBus,
   DefaultRequestHandler,
 } from "@a2a-js/sdk/server"; // Import server components
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
 import { ai } from "./genkit.js";
-import { CodeMessage } from "./code-format.js"; // CodeMessageSchema might not be needed here
+import type { CodeMessage } from "./code-format.js"; // CodeMessageSchema might not be needed here
 
-if (!process.env.GEMINI_API_KEY) {
-  console.error("GEMINI_API_KEY environment variable not set.")
+if (process.env.GEMINI_API_KEY === undefined || process.env.GEMINI_API_KEY === '') {
+  console.error("GEMINI_API_KEY environment variable not set or empty.");
   process.exit(1);
 }
 
@@ -42,7 +43,7 @@ class CoderAgentExecutor implements AgentExecutor {
         // Publish immediate cancellation event
         const cancelledUpdate: TaskStatusUpdateEvent = {
           kind: 'status-update',
-          taskId: taskId,
+          taskId,
           contextId: uuidv4(), // Generate context ID for cancellation
           status: {
             state: 'canceled',
@@ -51,7 +52,7 @@ class CoderAgentExecutor implements AgentExecutor {
               role: 'agent',
               messageId: uuidv4(),
               parts: [{ kind: 'text', text: 'Code generation cancelled.' }],
-              taskId: taskId,
+              taskId,
               contextId: uuidv4(),
             },
             timestamp: new Date().toISOString(),
@@ -68,8 +69,8 @@ class CoderAgentExecutor implements AgentExecutor {
     const {userMessage} = requestContext;
     const existingTask = requestContext.task;
 
-    const taskId = existingTask?.id || uuidv4();
-    const contextId = userMessage.contextId || existingTask?.contextId || uuidv4();
+    const taskId = existingTask?.id ?? uuidv4();
+    const contextId = (userMessage.contextId ?? existingTask?.contextId) ?? uuidv4();
 
     console.log(
       `[CoderAgentExecutor] Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId})`
@@ -80,7 +81,7 @@ class CoderAgentExecutor implements AgentExecutor {
       const initialTask: Task = {
         kind: 'task',
         id: taskId,
-        contextId: contextId,
+        contextId,
         status: {
           state: 'submitted',
           timestamp: new Date().toISOString(),
@@ -97,8 +98,8 @@ class CoderAgentExecutor implements AgentExecutor {
     // 2. Publish "working" status update
     const workingStatusUpdate: TaskStatusUpdateEvent = {
       kind: 'status-update',
-      taskId: taskId,
-      contextId: contextId,
+      taskId,
+      contextId,
       status: {
         state: 'working',
         message: {
@@ -106,8 +107,8 @@ class CoderAgentExecutor implements AgentExecutor {
           role: 'agent',
           messageId: uuidv4(),
           parts: [{ kind: 'text', text: 'Generating code...' }],
-          taskId: taskId,
-          contextId: contextId,
+          taskId,
+          contextId,
         },
         timestamp: new Date().toISOString(),
       },
@@ -122,12 +123,12 @@ class CoderAgentExecutor implements AgentExecutor {
     }
 
     const messages: MessageData[] = historyForGenkit
-      .map((m) => ({
-        role: (m.role === 'agent' ? 'model' : 'user') as 'user' | 'model',
+      .map((m): MessageData => ({
+        role: m.role === 'agent' ? 'model' : 'user',
         content: m.parts
-          .filter((p): p is TextPart => p.kind === 'text' && !!(p as TextPart).text)
+          .filter((p): p is TextPart => p.kind === 'text' && !!(p).text)
           .map((p) => ({
-            text: (p as TextPart).text,
+            text: (p).text,
           })),
       }))
       .filter((m) => m.content.length > 0);
@@ -138,8 +139,8 @@ class CoderAgentExecutor implements AgentExecutor {
       );
       const failureUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
-        taskId: taskId,
-        contextId: contextId,
+        taskId,
+        contextId,
         status: {
           state: 'failed',
           message: {
@@ -147,8 +148,8 @@ class CoderAgentExecutor implements AgentExecutor {
             role: 'agent',
             messageId: uuidv4(),
             parts: [{ kind: 'text', text: 'No input message found to process.' }],
-            taskId: taskId,
-            contextId: contextId,
+            taskId,
+            contextId,
           },
           timestamp: new Date().toISOString(),
         },
@@ -160,11 +161,12 @@ class CoderAgentExecutor implements AgentExecutor {
 
     try {
       // 4. Run the Genkit prompt
-      const { stream, response } = await ai.generateStream({
-        system:
-          'You are an expert coding assistant. Provide a high-quality code sample according to the output instructions provided below. You may generate multiple files as needed.',
+      const { stream, response } = ai.generateStream({
+        system: 'You are an expert coding assistant. Provide a high-quality code sample according to the output instructions provided below. You may generate multiple files as needed.',
         output: { format: 'code' },
         messages,
+        tools: [], // No tools for now
+        model: 'gemini-2.5-flash', // Ensure the model is specified
       });
 
       const fileContents = new Map<string, string>(); // Stores latest content per file
@@ -205,8 +207,8 @@ class CoderAgentExecutor implements AgentExecutor {
                 );
                 const artifactUpdate: TaskArtifactUpdateEvent = {
                   kind: 'artifact-update',
-                  taskId: taskId,
-                  contextId: contextId,
+                  taskId,
+                  contextId,
                   artifact: {
                     artifactId: prevFilename,
                     name: prevFilename,
@@ -226,8 +228,8 @@ class CoderAgentExecutor implements AgentExecutor {
 
               const cancelledUpdate: TaskStatusUpdateEvent = {
                 kind: 'status-update',
-                taskId: taskId,
-                contextId: contextId,
+                taskId,
+                contextId,
                 status: {
                   state: 'canceled',
                   timestamp: new Date().toISOString(),
@@ -256,8 +258,8 @@ class CoderAgentExecutor implements AgentExecutor {
         );
         const artifactUpdate: TaskArtifactUpdateEvent = {
           kind: 'artifact-update',
-          taskId: taskId,
-          contextId: contextId,
+          taskId,
+          contextId,
           artifact: {
             artifactId: filename,
             name: filename,
@@ -275,8 +277,8 @@ class CoderAgentExecutor implements AgentExecutor {
       // 5. Publish final task status update
       const finalUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
-        taskId: taskId,
-        contextId: contextId,
+        taskId,
+        contextId,
         status: {
           state: 'completed',
           message: {
@@ -292,8 +294,8 @@ class CoderAgentExecutor implements AgentExecutor {
                     : 'Completed, but no files were generated.',
               },
             ],
-            taskId: taskId,
-            contextId: contextId,
+            taskId,
+            contextId,
           },
           timestamp: new Date().toISOString(),
         },
@@ -312,8 +314,8 @@ class CoderAgentExecutor implements AgentExecutor {
       );
       const errorUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
-        taskId: taskId,
-        contextId: contextId,
+        taskId,
+        contextId,
         status: {
           state: 'failed',
           message: {
@@ -321,8 +323,8 @@ class CoderAgentExecutor implements AgentExecutor {
             role: 'agent',
             messageId: uuidv4(),
             parts: [{ kind: 'text', text: `Agent error: ${error.message} ` }],
-            taskId: taskId,
-            contextId: contextId,
+            taskId,
+            contextId,
           },
           timestamp: new Date().toISOString(),
         },
@@ -392,7 +394,7 @@ async function main() {
   const expressApp = appBuilder.setupRoutes(express(), '');
 
   // 5. Start the server
-  const PORT = process.env.CODER_AGENT_PORT || 41242; // Different port for coder agent
+  const PORT = process.env.CODER_AGENT_PORT ?? 41242; // Different port for coder agent
   expressApp.listen(PORT, () => {
     console.log(`[CoderAgent] Server using new framework started on http://localhost:${PORT}`);
     console.log(`[CoderAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
@@ -401,3 +403,4 @@ async function main() {
 }
 
 main().catch(console.error);
+

@@ -99,7 +99,8 @@ export class TaskDelegator {
       status: 'pending',
       progressUpdates: [],
       retryCount: 0,
-      startedAt: new Date()
+      startedAt: new Date(),
+      result: null // Add result property to store task response
     };
 
     try {
@@ -369,11 +370,12 @@ export class TaskDelegator {
   /**
    * Handle successful task completion
    */
-  private handleTaskCompletion(stepId: string, response: any): void {
+  private handleTaskCompletion(stepId: string, response: unknown): void {
     const execution = this.activeTasks.get(stepId);
     if (execution) {
       execution.status = 'completed';
       execution.completedAt = new Date();
+      execution.result = response; // Store the response as the task result
       console.log(`Task completed for step ${stepId}`);
     }
   }
@@ -381,7 +383,7 @@ export class TaskDelegator {
   /**
    * Handle task failure
    */
-  private handleTaskFailure(stepId: string, error: any): void {
+  private handleTaskFailure(stepId: string, error: unknown): void {
     const execution = this.activeTasks.get(stepId);
     if (execution) {
       execution.status = 'failed';
