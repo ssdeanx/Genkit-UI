@@ -7,19 +7,16 @@
 [![A2A](https://img.shields.io/badge/A2A-^0.3.4-yellowgreen?logo=npm)](https://www.npmjs.com/package/@a2a-js/sdk)
 [![Express](https://img.shields.io/badge/Express-^4.21.2-lightgrey?logo=express)](https://expressjs.com)
 [![Genkit](https://img.shields.io/badge/Genkit-^1.19.3-orange)](https://github.com/genkit-ai)
-
 <!-- Genkit ecosystem packages -->
 [![@genkit-ai/core](https://img.shields.io/npm/v/@genkit-ai%2Fcore?label=@genkit-ai%2Fcore&logo=npm)](https://www.npmjs.com/package/@genkit-ai/core)
 [![@genkit-ai/google-genai](https://img.shields.io/npm/v/@genkit-ai%2Fgoogle-genai?label=@genkit-ai%2Fgoogle-genai&logo=npm)](https://www.npmjs.com/package/@genkit-ai/google-genai)
 [![@genkit-ai/express](https://img.shields.io/npm/v/@genkit-ai%2Fexpress?label=@genkit-ai%2Fexpress&logo=npm)](https://www.npmjs.com/package/@genkit-ai/express)
 [![@genkit-ai/mcp](https://img.shields.io/npm/v/@genkit-ai%2Fmcp?label=@genkit-ai%2Fmcp&logo=npm)](https://www.npmjs.com/package/@genkit-ai/mcp)
-
 <!-- Runtime & integrations -->
 [![prisma](https://img.shields.io/npm/v/prisma?label=prisma&logo=npm)](https://www.npmjs.com/package/prisma)
 [![firebase](https://img.shields.io/npm/v/firebase?label=firebase&logo=npm)](https://www.npmjs.com/package/firebase)
 [![serpapi](https://img.shields.io/npm/v/serpapi?label=serpapi&logo=npm)](https://www.npmjs.com/package/serpapi)
 [![wikipedia](https://img.shields.io/npm/v/wikipedia?label=wikipedia&logo=npm)](https://www.npmjs.com/package/wikipedia)
-
 <!-- Dev tooling -->
 [![zod](https://img.shields.io/npm/v/zod?label=zod&logo=npm)](https://www.npmjs.com/package/zod)
 [![tsx](https://img.shields.io/npm/v/tsx?label=tsx&logo=npm)](https://www.npmjs.com/package/tsx)
@@ -41,52 +38,87 @@ A production-oriented, TypeScript multi-agent AI platform built on Google Genkit
 ## Architecture (Mermaid)
 
 ```mermaid
-flowchart LR
-  subgraph User
-    U[User / CLI / UI]
-  end
+graph TD
 
-  subgraph DevOps[Developer Tools]
-    UI[Genkit UI]
-    CLI[A2A CLI]
-  end
+    user["User<br>/src/cli.ts"]
+    wikipedia["Wikipedia API<br>/src/tools/wikipediaTool.ts"]
+    weatherService["Weather Service API<br>/src/tools/weatherTool.ts"]
+    academicSearch["Academic Search Service<br>/src/agents/academic-research-agent/academic-search.ts"]
+    newsSearch["News Search Service<br>/src/agents/news-research-agent/news-search.ts"]
+    webSearch["Web Search Service<br>/src/agents/web-research-agent/web-search.ts"]
+    chromaDB["ChromaDB<br>/chroma/"]
+    subgraph genkitApp["Genkit Application<br>[External]"]
+        subgraph cliApp["CLI Application<br>/src/cli.ts"]
+            cliMain["CLI Main<br>/src/cli.ts"]
+            config["Configuration<br>/src/config.ts"]
+            %% Edges at this level (grouped by source)
+            cliMain["CLI Main<br>/src/cli.ts"] -->|"Uses | Reads configuration"| config["Configuration<br>/src/config.ts"]
+        end
+        subgraph agentService["Agent Service<br>/src/agents/"]
+            academicResearchAgent["Academic Research Agent<br>/src/agents/academic-research-agent/"]
+            coderAgent["Coder Agent<br>/src/agents/coder/"]
+            contentEditorAgent["Content Editor Agent<br>/src/agents/content-editor/"]
+            dataAnalysisAgent["Data Analysis Agent<br>/src/agents/data-analysis-agent/"]
+            newsResearchAgent["News Research Agent<br>/src/agents/news-research-agent/"]
+            orchestratorAgent["Orchestrator Agent<br>/src/agents/orchestrator-agent/"]
+            planningAgent["Planning Agent<br>/src/agents/planning-agent/"]
+            webResearchAgent["Web Research Agent<br>/src/agents/web-research-agent/"]
+            sharedInterfaces["Shared Interfaces<br>/src/agents/shared/interfaces.ts"]
+            %% Edges at this level (grouped by source)
+            orchestratorAgent["Orchestrator Agent<br>/src/agents/orchestrator-agent/"] -->|"Delegates to"| academicResearchAgent["Academic Research Agent<br>/src/agents/academic-research-agent/"]
+            orchestratorAgent["Orchestrator Agent<br>/src/agents/orchestrator-agent/"] -->|"Delegates to"| coderAgent["Coder Agent<br>/src/agents/coder/"]
+            orchestratorAgent["Orchestrator Agent<br>/src/agents/orchestrator-agent/"] -->|"Delegates to"| contentEditorAgent["Content Editor Agent<br>/src/agents/content-editor/"]
+            orchestratorAgent["Orchestrator Agent<br>/src/agents/orchestrator-agent/"] -->|"Delegates to"| dataAnalysisAgent["Data Analysis Agent<br>/src/agents/data-analysis-agent/"]
+            orchestratorAgent["Orchestrator Agent<br>/src/agents/orchestrator-agent/"] -->|"Delegates to"| newsResearchAgent["News Research Agent<br>/src/agents/news-research-agent/"]
+            orchestratorAgent["Orchestrator Agent<br>/src/agents/orchestrator-agent/"] -->|"Delegates to"| planningAgent["Planning Agent<br>/src/agents/planning-agent/"]
+            orchestratorAgent["Orchestrator Agent<br>/src/agents/orchestrator-agent/"] -->|"Delegates to"| webResearchAgent["Web Research Agent<br>/src/agents/web-research-agent/"]
+            orchestratorAgent["Orchestrator Agent<br>/src/agents/orchestrator-agent/"] -->|"Uses"| sharedInterfaces["Shared Interfaces<br>/src/agents/shared/interfaces.ts"]
+            academicResearchAgent["Academic Research Agent<br>/src/agents/academic-research-agent/"] -->|"Uses"| sharedInterfaces["Shared Interfaces<br>/src/agents/shared/interfaces.ts"]
+            coderAgent["Coder Agent<br>/src/agents/coder/"] -->|"Uses"| sharedInterfaces["Shared Interfaces<br>/src/agents/shared/interfaces.ts"]
+            contentEditorAgent["Content Editor Agent<br>/src/agents/content-editor/"] -->|"Uses"| sharedInterfaces["Shared Interfaces<br>/src/agents/shared/interfaces.ts"]
+            dataAnalysisAgent["Data Analysis Agent<br>/src/agents/data-analysis-agent/"] -->|"Uses"| sharedInterfaces["Shared Interfaces<br>/src/agents/shared/interfaces.ts"]
+            newsResearchAgent["News Research Agent<br>/src/agents/news-research-agent/"] -->|"Uses"| sharedInterfaces["Shared Interfaces<br>/src/agents/shared/interfaces.ts"]
+            planningAgent["Planning Agent<br>/src/agents/planning-agent/"] -->|"Uses"| sharedInterfaces["Shared Interfaces<br>/src/agents/shared/interfaces.ts"]
+            webResearchAgent["Web Research Agent<br>/src/agents/web-research-agent/"] -->|"Uses"| sharedInterfaces["Shared Interfaces<br>/src/agents/shared/interfaces.ts"]
+        end
+        subgraph flowEngine["Flow Execution Engine<br>/src/flows/"]
+            recipeFlow["Recipe Generator Flow<br>/src/flows/recipeGeneratorFlow.ts"]
+            weatherFlow["Weather Flow<br>/src/flows/weatherFlow.ts"]
+        end
+        subgraph toolService["Tool Integration Service<br>/src/tools/"]
+            calculatorTool["Calculator Tool<br>/src/tools/calculatorTool.ts"]
+            weatherTool["Weather Tool<br>/src/tools/weatherTool.ts"]
+            wikipediaTool["Wikipedia Tool<br>/src/tools/wikipediaTool.ts"]
+        end
+        subgraph mcp["Message Communication Platform<br>/src/mcp/"]
+            mcpClient["MCP Client<br>/src/mcp/mcpClient.ts"]
+            mcpServer["MCP Server<br>/src/mcp/mcpServer.ts"]
+            %% Edges at this level (grouped by source)
+            mcpClient["MCP Client<br>/src/mcp/mcpClient.ts"] -->|"Communicates with | Internal Protocol"| mcpServer["MCP Server<br>/src/mcp/mcpServer.ts"]
+        end
+        %% Edges at this level (grouped by source)
+        cliMain["CLI Main<br>/src/cli.ts"] -->|"Invokes | Agent tasks"| agentService["Agent Service<br>/src/agents/"]
+        cliMain["CLI Main<br>/src/cli.ts"] -->|"Triggers | Workflow execution"| flowEngine["Flow Execution Engine<br>/src/flows/"]
+        agentService["Agent Service<br>/src/agents/"] -->|"Uses | Tool functionalities"| toolService["Tool Integration Service<br>/src/tools/"]
+        agentService["Agent Service<br>/src/agents/"] -->|"Communicates via | Messages"| mcp["Message Communication Platform<br>/src/mcp/"]
+        flowEngine["Flow Execution Engine<br>/src/flows/"] -->|"Orchestrates | Agent tasks"| agentService["Agent Service<br>/src/agents/"]
+        flowEngine["Flow Execution Engine<br>/src/flows/"] -->|"Uses | Tool functionalities"| toolService["Tool Integration Service<br>/src/tools/"]
+        flowEngine["Flow Execution Engine<br>/src/flows/"] -->|"Communicates via | Messages"| mcp["Message Communication Platform<br>/src/mcp/"]
+    end
+    %% Edges at this level (grouped by source)
+    user["User<br>/src/cli.ts"] -->|"Uses | CLI"| cliMain["CLI Main<br>/src/cli.ts"]
+    agentService["Agent Service<br>/src/agents/"] -->|"Stores/Retrieves | Embeddings"| chromaDB["ChromaDB<br>/chroma/"]
+    toolService["Tool Integration Service<br>/src/tools/"] -->|"Queries | HTTP/S"| wikipedia["Wikipedia API<br>/src/tools/wikipediaTool.ts"]
+    toolService["Tool Integration Service<br>/src/tools/"] -->|"Queries | HTTP/S"| weatherService["Weather Service API<br>/src/tools/weatherTool.ts"]
+    toolService["Tool Integration Service<br>/src/tools/"] -->|"Queries | HTTP/S"| academicSearch["Academic Search Service<br>/src/agents/academic-research-agent/academic-search.ts"]
+    toolService["Tool Integration Service<br>/src/tools/"] -->|"Queries | HTTP/S"| newsSearch["News Search Service<br>/src/agents/news-research-agent/news-search.ts"]
+    toolService["Tool Integration Service<br>/src/tools/"] -->|"Queries | HTTP/S"| webSearch["Web Search Service<br>/src/agents/web-research-agent/web-search.ts"]
+    academicResearchAgent["Academic Research Agent<br>/src/agents/academic-research-agent/"] -->|"Queries | HTTP/S"| academicSearch["Academic Search Service<br>/src/agents/academic-research-agent/academic-search.ts"]
+    newsResearchAgent["News Research Agent<br>/src/agents/news-research-agent/"] -->|"Queries | HTTP/S"| newsSearch["News Search Service<br>/src/agents/news-research-agent/news-search.ts"]
+    webResearchAgent["Web Research Agent<br>/src/agents/web-research-agent/"] -->|"Queries | HTTP/S"| webSearch["Web Search Service<br>/src/agents/web-research-agent/web-search.ts"]
+    weatherTool["Weather Tool<br>/src/tools/weatherTool.ts"] -->|"Calls | HTTP/S"| weatherService["Weather Service API<br>/src/tools/weatherTool.ts"]
+    wikipediaTool["Wikipedia Tool<br>/src/tools/wikipediaTool.ts"] -->|"Calls | HTTP/S"| wikipedia["Wikipedia API<br>/src/tools/wikipediaTool.ts"]
 
-  subgraph Flows[Genkit Flows]
-    OF[Orchestrator Flow]
-    RF[Recipe Generator Flow]
-    WF[Weather Flow]
-  end
-
-  subgraph Agents[Agents (Express + A2A)]
-    O[Orchestrator Agent]
-    P[Planning Agent]
-    C[Coder Agent]
-    E[Content Editor]
-  end
-
-  subgraph Tools[Stateless Tools]
-    Wiki[Wikipedia Tool]
-    Calc[Calculator Tool]
-    Weather[Weather Tool]
-  end
-
-  subgraph Cloud[External]
-    Gemini[Gemini API]
-  end
-
-  U -->|interact| UI
-  U -->|interact| CLI
-  UI --> OF
-  OF --> O
-  O -->|delegate (A2A)| P
-  O -->|delegate (A2A)| C
-  O -->|delegate (A2A)| E
-  OF --> Tools
-  RF --> Wiki
-  WF --> Weather
-  Tools -->|call| Gemini
-  O -->|aggregate| OF
-  CLI --> O
 ```
 
 > Note: The diagram shows high-level components. See `.github/architecture.md` for a detailed blueprint.
@@ -124,6 +156,18 @@ npm run agents:planning             # starts planning agent on port 41245
 npm run agents:coder                # starts coder agent on port 41241
 npm run agents:content-editor       # starts content editor agent (default port 10003)
 ```
+
+---
+
+## Local Pinecone Setup
+
+To run the local Pinecone instance, ensure you have Docker installed and run:
+
+```bash
+docker compose up -d
+```
+
+This will start two Pinecone instances: `dense-index` on port `5081` and `sparse-index` on port `5082`.
 
 ---
 

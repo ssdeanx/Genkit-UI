@@ -1,0 +1,261 @@
+# Genkit-UI (my-genkit-app)
+
+> Multi-agent Genkit example repository with flows, agents, tools, and MCP/A2A wiring. This file lists the important files and folders for both LLMs and developers.
+
+This repository demonstrates Genkit flows (Zod-validated outputs), multiple A2A agents (orchestrator, planning, research, coder, content-editor), and example tools. The `src/` tree contains the primary code; root files and `.github/` contain run and architecture docs.
+
+## Documentation
+
+- [README.md](README.md): Primary project overview and quickstart guide.
+- [GEMINI.md](GEMINI.md): Notes and configuration hints for Google Gemini and Genkit.
+- [LICENSE](LICENSE): Project license.
+- [.env.example](.env.example): Example environment variables for local runs.
+- [.github/architecture.md](.github/architecture.md): Architecture overview and design notes.
+- [.github/exemplars.md](.github/exemplars.md): Example patterns and exemplars used by the repo.
+- [.github/copilot-instructions.md](.github/copilot-instructions.md): Special generation/instruction guidance for Copilot and agents.
+- [.github/prompts/create-llms.prompt.md](.github/prompts/create-llms.prompt.md): Prompt used to generate this file.
+- [.github/prompts/update-llms.prompt.md](.github/prompts/update-llms.prompt.md): Prompt for updating this file.
+
+## Plans & maintenance
+
+- [plans/genkit-project-build-out.md](plans/genkit-project-build-out.md)
+- [plans/multi-agent-genkit-v3.md](plans/multi-agent-genkit-v3.md)
+- [plans/multi-agent-genkit-v4.md](plans/multi-agent-genkit-v4.md)
+
+## Root config & scripts
+
+- [package.json](package.json): Scripts (dev, agents, tests) and dependency list.
+- [docker-compose.yaml](docker-compose.yaml): Compose orchestration (if used locally).
+- [tsconfig.json](tsconfig.json): TypeScript config.
+- [vitest.config.ts](vitest.config.ts): Test runner configuration.
+- [.nvmrc](.nvmrc): Node version.
+- [prettier.config.js](prettier.config.js)
+- [eslint.config.js](eslint.config.js)
+
+## Core source (top-level)
+
+- [src/](src/): Primary TypeScript source folder.
+- [src/config.ts](src/config.ts): Central `ai` instance configuration (Gemini model, plugins, dev local vectorstore).
+- [src/cli.ts](src/cli.ts): Terminal A2A client used to interact with agents and observe streaming events.
+- [src/index.ts](src/index.ts): Exports flows used by the Genkit UI and tooling.
+
+## Flows
+
+- [src/flows/recipeGeneratorFlow.ts](src/flows/recipeGeneratorFlow.ts): Recipe flow example demonstrating Zod schema output.
+- [src/flows/weatherFlow.ts](src/flows/weatherFlow.ts): Weather flow example.
+- [src/flows/weatherFlow.test.ts](src/flows/weatherFlow.test.ts): Unit test for the weather flow.
+
+## Schemas
+
+- [src/schemas/recipeSchema.ts](src/schemas/recipeSchema.ts): Recipe output contract used by the recipe flow.
+
+## Tools
+
+- [src/tools/wikipediaTool.ts](src/tools/wikipediaTool.ts): Wikipedia lookup wrapper.
+- [src/tools/weatherTool.ts](src/tools/weatherTool.ts): Example weather data tool.
+- [src/tools/calculatorTool.ts](src/tools/calculatorTool.ts): Deterministic calculation tool.
+
+## MCP / A2A (Messaging)
+
+- [src/mcp/mcpClient.ts](src/mcp/mcpClient.ts): Client utilities for A2A interactions.
+- [src/mcp/mcpServer.ts](src/mcp/mcpServer.ts): Local MCP server helper used in development.
+
+## Agents (detailed)
+
+Below are the agents and the files associated with each. These are prioritized when you want to understand A2A patterns and agent responsibilities.
+
+- Orchestrator agent (central)
+  - [src/agents/orchestrator-agent/index.ts](src/agents/orchestrator-agent/index.ts)
+  - [src/agents/orchestrator-agent/genkit.ts](src/agents/orchestrator-agent/genkit.ts)
+  - [src/agents/orchestrator-agent/orchestrator.prompt](src/agents/orchestrator-agent/orchestrator.prompt)
+  - [src/agents/orchestrator-agent/task-delegator.ts](src/agents/orchestrator-agent/task-delegator.ts)
+  - [src/agents/orchestrator-agent/result-aggregator.ts](src/agents/orchestrator-agent/result-aggregator.ts)
+  - [src/agents/orchestrator-agent/synthesis-engine.ts](src/agents/orchestrator-agent/synthesis-engine.ts)
+  - [src/agents/orchestrator-agent/a2a-communication.ts](src/agents/orchestrator-agent/a2a-communication.ts)
+  - [src/agents/orchestrator-agent/streaming-handler.ts](src/agents/orchestrator-agent/streaming-handler.ts)
+  - [src/agents/orchestrator-agent/quality-validator.ts](src/agents/orchestrator-agent/quality-validator.ts)
+  - [src/agents/orchestrator-agent/progress-tracker.ts](src/agents/orchestrator-agent/progress-tracker.ts)
+  - [src/agents/orchestrator-agent/state-manager.ts](src/agents/orchestrator-agent/state-manager.ts)
+  - [src/agents/orchestrator-agent/error-recovery.ts](src/agents/orchestrator-agent/error-recovery.ts)
+  - [src/agents/orchestrator-agent/__tests__/orchestrator.spec.ts](src/agents/orchestrator-agent/__tests__/orchestrator.spec.ts)
+
+- Planning agent
+  - [src/agents/planning-agent/index.ts](src/agents/planning-agent/index.ts)
+  - [src/agents/planning-agent/genkit.ts](src/agents/planning-agent/genkit.ts)
+  - [src/agents/planning-agent/planning_agent.prompt](src/agents/planning-agent/planning_agent.prompt)
+  - [src/agents/planning-agent/step-decomposer.ts](src/agents/planning-agent/step-decomposer.ts)
+  - [src/agents/planning-agent/query-analyzer.ts](src/agents/planning-agent/query-analyzer.ts)
+  - [src/agents/planning-agent/contingency-planner.ts](src/agents/planning-agent/contingency-planner.ts)
+  - [src/agents/planning-agent/data-source-identifier.ts](src/agents/planning-agent/data-source-identifier.ts)
+  - [src/agents/planning-agent/methodology-selector.ts](src/agents/planning-agent/methodology-selector.ts)
+  - [src/agents/planning-agent/risk-assessor.ts](src/agents/planning-agent/risk-assessor.ts)
+
+- Research agents (academic, news, web)
+  - [src/agents/academic-research-agent/index.ts](src/agents/academic-research-agent/index.ts)
+  - [src/agents/academic-research-agent/genkit.ts](src/agents/academic-research-agent/genkit.ts)
+  - [src/agents/academic-research-agent/academic_research.prompt](src/agents/academic-research-agent/academic_research.prompt)
+  - [src/agents/academic-research-agent/academic-search.ts](src/agents/academic-research-agent/academic-search.ts)
+  - [src/agents/news-research-agent/index.ts](src/agents/news-research-agent/index.ts)
+  - [src/agents/news-research-agent/genkit.ts](src/agents/news-research-agent/genkit.ts)
+  - [src/agents/news-research-agent/news_research.prompt](src/agents/news-research-agent/news_research.prompt)
+  - [src/agents/news-research-agent/news-search.ts](src/agents/news-research-agent/news-search.ts)
+  - [src/agents/web-research-agent/index.ts](src/agents/web-research-agent/index.ts)
+  - [src/agents/web-research-agent/genkit.ts](src/agents/web-research-agent/genkit.ts)
+  - [src/agents/web-research-agent/web_research.prompt](src/agents/web-research-agent/web_research.prompt)
+  - [src/agents/web-research-agent/web-search.ts](src/agents/web-research-agent/web-search.ts)
+
+- Coder agent
+  - [src/agents/coder/index.ts](src/agents/coder/index.ts)
+  - [src/agents/coder/genkit.ts](src/agents/coder/genkit.ts)
+  - [src/agents/coder/code-format.ts](src/agents/coder/code-format.ts)
+
+- Content editor agent
+  - [src/agents/content-editor/index.ts](src/agents/content-editor/index.ts)
+  - [src/agents/content-editor/genkit.ts](src/agents/content-editor/genkit.ts)
+  - [src/agents/content-editor/content_editor.prompt](src/agents/content-editor/content_editor.prompt)
+  - [src/agents/content-editor/.env.example](src/agents/content-editor/.env.example)
+
+- Data-analysis agent
+  - [src/agents/data-analysis-agent/index.ts](src/agents/data-analysis-agent/index.ts)
+  - [src/agents/data-analysis-agent/genkit.ts](src/agents/data-analysis-agent/genkit.ts)
+  - [src/agents/data-analysis-agent/data_analysis.prompt](src/agents/data-analysis-agent/data_analysis.prompt)
+
+## Shared utilities
+
+- [src/agents/shared/interfaces.ts](src/agents/shared/interfaces.ts): Cross-agent type definitions and interfaces.
+
+## Tests
+
+- [src/agents/orchestrator-agent/__tests__/orchestrator.spec.ts](src/agents/orchestrator-agent/__tests__/orchestrator.spec.ts): Unit tests for the orchestrator.
+- [src/flows/weatherFlow.test.ts](src/flows/weatherFlow.test.ts): Unit tests for the weather flow.
+
+## Quick orientation
+
+- Start with `[README.md](README.md)` for high-level directions and run scripts.
+- Inspect `[src/config.ts](src/config.ts)` for the Genkit model configuration and plugin setup.
+- Review `src/agents/orchestrator-agent/` to understand orchestration, A2A delegation, and synthesis flows.
+- Read `src/flows/recipeGeneratorFlow.ts` and `src/schemas/recipeSchema.ts` for a complete example of flow + schema.
+
+If you want an even more exhaustive list (every file with a one-line description), tell me and I'll expand the agent and flow sections to list every file explicitly with short descriptions.
+# Genkit-UI (my-genkit-app)
+
+> Multi-agent Genkit example repository with flows, agents, tools, and MCP/A2A wiring. Use this file to quickly find prompts, agent implementations, flows, schemas, tools, and run scripts.
+
+This repository is organized to demonstrate Genkit flows (Zod-validated outputs), multiple A2A agents (orchestrator, planning, research, coder, content-editor), and small example tools. The `src/` tree contains the primary code; `package.json` and `GEMINI.md` document how to run and configure the system.
+
+## Documentation
+
+- [Main README](README.md): Primary project overview and quickstart notes.
+- [.github/prompts/create-llms.prompt.md](.github/prompts/create-llms.prompt.md): The prompt that guided creation of this `llms.txt` file.
+- [.github/architecture.md](.github/architecture.md): Architecture overview and design notes referenced by maintainers.
+- [GEMINI.md](GEMINI.md): Notes and configuration hints for using Google Gemini and Genkit in this project.
+
+## Root config & scripts
+
+- [package.json](package.json): Scripts (dev, agents, tests) and dependency list.
+- [docker-compose.yaml](docker-compose.yaml): Compose orchestration (if used locally).
+- [vitest.config.ts](vitest.config.ts): Test runner configuration.
+
+## Core source (top-level)
+
+- [Source root](src/): Primary TypeScript source folder.
+- [Exports (`src/index.ts`)](src/index.ts): Exports flows used by the Genkit UI and dev tooling.
+- [Genkit config (`src/config.ts`)](src/config.ts): Central `ai` instance configuration (Gemini model, plugins, dev local vectorstore).
+- [CLI client (`src/cli.ts`)](src/cli.ts): Terminal A2A client used to interact with agents and observe streaming events.
+
+## Flows
+
+- [Flows directory (`src/flows/`)](src/flows/): Genkit flow definitions and tests.
+  - [recipeGeneratorFlow.ts](src/flows/recipeGeneratorFlow.ts): Recipe flow example demonstrating Zod schema output.
+  - [weatherFlow.ts](src/flows/weatherFlow.ts): Simple flow example.
+  - [weatherFlow.test.ts](src/flows/weatherFlow.test.ts): Unit test for the weather flow.
+
+## Schemas
+
+- [Schemas directory (`src/schemas/`)](src/schemas/): Zod schemas and types used by flows.
+  - [recipeSchema.ts](src/schemas/recipeSchema.ts): Recipe output contract used by the recipe flow.
+
+## Tools
+
+- [Tools directory (`src/tools/`)](src/tools/): Reusable tool implementations.
+  - [wikipediaTool.ts](src/tools/wikipediaTool.ts): Wikipedia lookup wrapper.
+  - [weatherTool.ts](src/tools/weatherTool.ts): Example weather data tool.
+  - [calculatorTool.ts](src/tools/calculatorTool.ts): Deterministic calculation tool with simple error handling.
+
+## MCP / A2A (Messaging)
+
+- [MCP client/server (`src/mcp/`)](src/mcp/): Bridge utilities used for agent communication.
+  - [mcpClient.ts](src/mcp/mcpClient.ts): Client utilities for A2A interactions.
+  - [mcpServer.ts](src/mcp/mcpServer.ts): Local MCP server helper used in development.
+
+## Agents (complete list)
+
+- [Agents root (`src/agents/`)](src/agents/) — contains multiple agents, prompts, and helper modules. Key subfolders and files:
+
+- Orchestrator agent (central):
+  - [src/agents/orchestrator-agent/index.ts](src/agents/orchestrator-agent/index.ts): Agent server entrypoint.
+  - [src/agents/orchestrator-agent/genkit.ts](src/agents/orchestrator-agent/genkit.ts): Genkit flow/setup for orchestrator.
+  - [src/agents/orchestrator-agent/orchestrator.prompt](src/agents/orchestrator-agent/orchestrator.prompt): Orchestrator prompt template.
+  - [src/agents/orchestrator-agent/task-delegator.ts](src/agents/orchestrator-agent/task-delegator.ts): Delegation logic.
+  - [src/agents/orchestrator-agent/result-aggregator.ts](src/agents/orchestrator-agent/result-aggregator.ts): Aggregation utilities.
+  - [src/agents/orchestrator-agent/synthesis-engine.ts](src/agents/orchestrator-agent/synthesis-engine.ts): Synthesis and result combination.
+  - [src/agents/orchestrator-agent/a2a-communication.ts](src/agents/orchestrator-agent/a2a-communication.ts): A2A helpers.
+  - [src/agents/orchestrator-agent/streaming-handler.ts](src/agents/orchestrator-agent/streaming-handler.ts): Streaming support.
+  - [src/agents/orchestrator-agent/quality-validator.ts](src/agents/orchestrator-agent/quality-validator.ts): Result validation logic.
+  - [src/agents/orchestrator-agent/progress-tracker.ts](src/agents/orchestrator-agent/progress-tracker.ts): Tracks task progress.
+  - [src/agents/orchestrator-agent/state-manager.ts](src/agents/orchestrator-agent/state-manager.ts): Orchestration state management.
+  - [src/agents/orchestrator-agent/error-recovery.ts](src/agents/orchestrator-agent/error-recovery.ts): Recovery heuristics.
+  - [src/agents/orchestrator-agent/__tests__/orchestrator.spec.ts](src/agents/orchestrator-agent/__tests__/orchestrator.spec.ts): Unit tests for orchestrator.
+
+- Planning agent:
+  - [src/agents/planning-agent/index.ts](src/agents/planning-agent/index.ts)
+  - [src/agents/planning-agent/genkit.ts](src/agents/planning-agent/genkit.ts)
+  - [src/agents/planning-agent/planning_agent.prompt](src/agents/planning-agent/planning_agent.prompt)
+  - [src/agents/planning-agent/step-decomposer.ts](src/agents/planning-agent/step-decomposer.ts)
+  - [src/agents/planning-agent/methodology-selector.ts](src/agents/planning-agent/methodology-selector.ts)
+  - [src/agents/planning-agent/contingency-planner.ts](src/agents/planning-agent/contingency-planner.ts)
+  - [src/agents/planning-agent/risk-assessor.ts](src/agents/planning-agent/risk-assessor.ts)
+  - [src/agents/planning-agent/query-analyzer.ts](src/agents/planning-agent/query-analyzer.ts)
+
+- Research agents (academic, news, web):
+  - [src/agents/academic-research-agent/academic_research.prompt](src/agents/academic-research-agent/academic_research.prompt)
+  - [src/agents/academic-research-agent/academic-search.ts](src/agents/academic-research-agent/academic-search.ts)
+  - [src/agents/academic-research-agent/genkit.ts](src/agents/academic-research-agent/genkit.ts)
+  - [src/agents/academic-research-agent/index.ts](src/agents/academic-research-agent/index.ts)
+  - [src/agents/news-research-agent/news_research.prompt](src/agents/news-research-agent/news_research.prompt)
+  - [src/agents/news-research-agent/news-search.ts](src/agents/news-research-agent/news-search.ts)
+  - [src/agents/news-research-agent/genkit.ts](src/agents/news-research-agent/genkit.ts)
+  - [src/agents/news-research-agent/index.ts](src/agents/news-research-agent/index.ts)
+  - [src/agents/web-research-agent/web_research.prompt](src/agents/web-research-agent/web_research.prompt)
+  - [src/agents/web-research-agent/web-search.ts](src/agents/web-research-agent/web-search.ts)
+  - [src/agents/web-research-agent/genkit.ts](src/agents/web-research-agent/genkit.ts)
+  - [src/agents/web-research-agent/index.ts](src/agents/web-research-agent/index.ts)
+
+- Coder agent:
+  - [src/agents/coder/index.ts](src/agents/coder/index.ts)
+  - [src/agents/coder/genkit.ts](src/agents/coder/genkit.ts)
+  - [src/agents/coder/code-format.ts](src/agents/coder/code-format.ts)
+
+- Content editor agent:
+  - [src/agents/content-editor/index.ts](src/agents/content-editor/index.ts)
+  - [src/agents/content-editor/genkit.ts](src/agents/content-editor/genkit.ts)
+  - [src/agents/content-editor/content_editor.prompt](src/agents/content-editor/content_editor.prompt)
+  - [src/agents/content-editor/.env.example](src/agents/content-editor/.env.example)
+
+## Shared utilities
+
+- [src/agents/shared/interfaces.ts](src/agents/shared/interfaces.ts): Cross-agent type definitions and interfaces.
+
+## Tests
+
+- [src/agents/orchestrator-agent/__tests__/orchestrator.spec.ts](src/agents/orchestrator-agent/__tests__/orchestrator.spec.ts): Unit tests for the orchestrator.
+- [src/flows/weatherFlow.test.ts](src/flows/weatherFlow.test.ts): Unit tests for the weather flow.
+
+## How to orient quickly
+
+- Start with `[README.md](README.md)` for high-level developer directions and run scripts.
+- Read `[src/config.ts](src/config.ts)` to see which model and plugins are configured (Gemini model, dev vectorstore).
+- Look into `src/agents/orchestrator-agent/` for the orchestration pattern (A2A communication, task delegation, synthesis).
+- Use `src/flows/` and `src/schemas/` to understand how flows are authored and validated.
+
+If any link above appears missing, open the `src/` directory or check the README for alternate locations.

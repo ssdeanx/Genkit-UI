@@ -14,9 +14,9 @@ import type {
  */
 export class OrchestratorStateManager {
   private researchStates: Map<string, OrchestrationState> = new Map();
-  private statePersistenceEnabled: boolean = false;
+  private statePersistenceEnabled = false;
 
-  constructor(persistenceEnabled: boolean = false) {
+  constructor(persistenceEnabled = false) {
     this.statePersistenceEnabled = persistenceEnabled;
     if (persistenceEnabled) {
       this.loadPersistedStates();
@@ -54,7 +54,7 @@ export class OrchestratorStateManager {
    * Get current orchestration state for a research project
    */
   getResearchState(researchId: string): OrchestrationState | null {
-    return this.researchStates.get(researchId) || null;
+    return this.researchStates.get(researchId) ?? null;
   }
 
   /**
@@ -221,7 +221,7 @@ export class OrchestratorStateManager {
   /**
    * Clean up completed research states (for memory management)
    */
-  cleanupCompletedResearch(maxAgeHours: number = 24): string[] {
+  cleanupCompletedResearch(maxAgeHours = 24): string[] {
     const cutoffTime = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
     const cleanedUp: string[] = [];
 

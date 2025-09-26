@@ -133,6 +133,7 @@ export interface ResearchStepExecution {
   progressUpdates: ProgressUpdate[];
   assignedAgent?: string;
   retryCount: number;
+  result?: any; // Optional property to store the task response
 }
 
 export interface ResearchStepResult {

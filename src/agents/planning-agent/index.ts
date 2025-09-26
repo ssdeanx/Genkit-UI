@@ -1,6 +1,6 @@
 import express from "express";
 import { v4 as uuidv4 } from 'uuid';
-import { z, type ZodTypeAny } from 'zod';  // Added import for Zod schemas and ZodTypeAny
+import { z } from 'zod';  // Removed deprecated ZodTypeAny
 
 import type { MessageData } from "genkit";
 import type {
@@ -13,7 +13,8 @@ import type {
   TaskStore,
   AgentExecutor,
   RequestContext,
-  ExecutionEventBus} from "@a2a-js/sdk/server";
+  ExecutionEventBus
+} from "@a2a-js/sdk/server";
 import {
   InMemoryTaskStore,
   DefaultRequestHandler,
@@ -27,7 +28,11 @@ import type {
   QueryAnalysis,
   OrchestrationState,
   ResearchStepExecution,
-  OrchestrationIssue
+  OrchestrationIssue,
+  ResearchDimension,
+  QualityThreshold,
+  ContingencyPlan,
+  RiskFactor
 } from "../shared/interfaces.js";
 import { QueryAnalyzer } from "./query-analyzer.js";
 import { MethodologySelector } from "./methodology-selector.js";
@@ -60,6 +65,22 @@ export class ResearchPlanner {
   }
 
   /**
+   * Maps complexity values from query analysis to the expected enum for methodology selection.
+   */
+  private mapComplexityToExpected(complexity: "low" | "medium" | "high"): "simple" | "moderate" | "complex" | "expert" {
+    switch (complexity) {
+      case "low":
+        return "simple";
+      case "medium":
+        return "moderate";
+      case "high":
+        return "complex";
+      default:
+        return "moderate";
+    }
+  }
+
+  /**
    * Execute comprehensive research planning for a given query
    */
   async execute(query: string): Promise<ResearchPlan> {
@@ -71,25 +92,56 @@ export class ResearchPlanner {
       const queryAnalysis = this.queryAnalyzer.analyzeQuery(query);
       console.log(`ResearchPlanner: Query analysis complete. Dimensions: ${queryAnalysis.researchDimensions.length}`);
 
-     // Ensure QueryAnalysis includes a timeline (required by generateComprehensivePlan)
-     // If the analyzer omitted timeline, provide a sensible default.
-     const queryAnalysisWithTimeline: QueryAnalysis = {
-       ...(queryAnalysis as any),
-       timeline: (queryAnalysis as any).timeline ?? 'unspecified',
-     };
-      
+      // Ensure QueryAnalysis includes a timeline (required by generateComprehensivePlan)
+      // If the analyzer omitted timeline, provide a sensible default.
+      const queryAnalysisWithTimeline: QueryAnalysis = {
+        ...(queryAnalysis as unknown as QueryAnalysis & { timeline?: string }),
+        timeline: (queryAnalysis as unknown as QueryAnalysis & { timeline?: string }).timeline ?? 'unspecified',
+      };
+
       // Step 2: Select appropriate research methodologies
       console.log("ResearchPlanner: Selecting methodologies...");
-      const methodologies = [this.methodologySelector.selectMethodology(queryAnalysisWithTimeline, "")];
+      const analysisInput = {
+        scopeDimensions: [] as string[], // Default: empty, to be computed in QueryAnalyzer if needed
+        knowledgeGaps: [] as string[], // Default: empty
+        stakeholderNeeds: [] as string[], // Default: empty
+        researchDimensions: queryAnalysisWithTimeline.researchDimensions ?? [] as ResearchDimension[],
+        complexity: this.mapComplexityToExpected(queryAnalysisWithTimeline.complexity ?? 'medium'),
+        estimatedScope: queryAnalysisWithTimeline.estimatedScope ?? 'broad' as const,
+      };
+      const methodologies = [this.methodologySelector.selectMethodology(analysisInput, "")];
       console.log(`ResearchPlanner: Selected ${methodologies.length} methodologies`);
 
-     // Ensure we have a valid methodology object with a stable 'approach' field.
-     // This avoids "Object is possibly 'undefined'." when accessing methodologies[0].approach.
-     const chosenMethodology: ResearchMethodology = methodologies[0] ?? { approach: 'exploratory', justification: '', phases: [], qualityControls: [] };
+      // Ensure we have a valid methodology object with a stable 'approach' field.
+      // This avoids "Object is possibly 'undefined'." when accessing methodologies[0].approach.
+      const chosenMethodology: ResearchMethodology = methodologies[0] ?? { approach: 'exploratory', justification: '', phases: [], qualityControls: [] };
 
       // Step 3: Identify and prioritize data sources
       console.log("ResearchPlanner: Identifying data sources...");
-      const dataSources = this.dataSourceIdentifier.identifyDataSources(queryAnalysis.researchDimensions, chosenMethodology.approach, queryAnalysis.coreQuestion);
+      // Raw results from the identifier may have loose types (e.g., type: string).
+      // Normalize to the canonical ResearchPlan['dataSources'] shape and narrow the
+      // `type` field to the allowed union values used across the codebase.
+      const rawDataSources = this.dataSourceIdentifier.identifyDataSources(
+        queryAnalysis.researchDimensions,
+        chosenMethodology.approach,
+        queryAnalysis.coreQuestion
+      ) as unknown[];
+
+      const dataSources: ResearchPlan['dataSources'] = (Array.isArray(rawDataSources) ? rawDataSources : []).map((ds: unknown) => {
+        const r = isRecord(ds) ? ds as RawDataSource : {};
+        // Explicitly narrow the type to the union using a type-safe check
+        const allowedTypes = ['academic', 'web', 'news', 'statistical', 'social', 'government'] as const;
+        const type: ResearchPlan['dataSources'][number]['type'] = allowedTypes.find(t => t === r.type) ?? 'web';
+        return {
+          type,
+          source: typeof r?.source === 'string' ? r.source : (typeof ds === 'string' ? ds : ''),
+          priority: typeof r?.priority === 'number' ? r.priority : this.mapPriorityStringToNumber(typeof r?.priority === 'string' ? r.priority : undefined),
+          credibilityWeight: typeof r?.credibilityWeight === 'number'
+            ? r.credibilityWeight
+            : (typeof r?.credibilityWeight === 'string' ? Number(r.credibilityWeight) || 0.5 : 0.5),
+          estimatedVolume: (r?.estimatedVolume && (typeof r.estimatedVolume === 'string' || typeof r.estimatedVolume === 'number')) ? r.estimatedVolume : 'medium',
+        } as ResearchPlan['dataSources'][number];
+      });
       console.log(`ResearchPlanner: Identified ${dataSources.length} data sources`);
 
       // Step 4: Decompose research into executable steps
@@ -158,35 +210,58 @@ export class ResearchPlanner {
         // Use explicit Zod shapes; allow extra properties via record
         schema: z.object({
           query: z.string(),
-          analysis: z.record(z.string(), z.unknown()),
-          methodologies: z.array(z.record(z.string(), z.unknown())),
-          dataSources: z.array(z.record(z.string(), z.unknown())),
-          steps: z.array(z.record(z.string(), z.unknown())),
-          risks: z.array(z.record(z.string(), z.unknown())),
-          contingencies: z.array(z.record(z.string(), z.unknown()))
-        })
+          analysis: z.record(z.string(), z.string()),
+          methodologies: z.array(z.record(z.string(), z.string())),
+          dataSources: z.array(z.object({
+            type: z.enum(['academic', 'web', 'news', 'statistical', 'social', 'government']),
+            source: z.string(),
+            priority: z.number(),
+            credibilityWeight: z.number(),
+            estimatedVolume: z.union(z.string(), z.number()),
+          })),
+          steps: z.array(z.record(z.string(), z.any())), // Use z.any() for steps as they are complex objects
+          risks: z.array(z.record(z.string(), z.string())),
+          contingencies: z.array(z.record(z.string(), z.string()))
+        }) as z.ZodSchema
       },
       output: {
-        // Use explicit Zod shapes; allow extra fields via catchall/record
+        // Output schema matches the canonical ResearchPlan interface as closely as possible
         schema: z.object({
-          title: z.string(),
-          objective: z.string(),
-          methodology: z.string(),
-          dataSources: z.array(z.string()),
-          executionSteps: z.array(
-            z.object({
-              id: z.string(),
-              description: z.string(),
-              agent: z.string(),
-              dependencies: z.array(z.string()),
-              estimatedDuration: z.number(),
-              priority: z.string()
-            }).catchall(z.unknown())
-          ),
-          riskMitigation: z.record(z.string(), z.unknown()),
-          // accept timeline as either string or a loose object
-          timeline: z.union([z.string(), z.record(z.string(), z.unknown())])
-        }) as ZodTypeAny
+          id: z.string().optional(),
+          topic: z.string().optional(),
+          objectives: z.array(z.string()).optional(),
+          methodology: z.object({
+            approach: z.string(),
+            justification: z.string().optional(),
+            phases: z.array(z.any()).optional(),
+            qualityControls: z.array(z.any()).optional(),
+          }).optional(),
+          dataSources: z.array(z.object({
+            type: z.string(),
+            source: z.string(),
+            priority: z.number(),
+            credibilityWeight: z.number(),
+            estimatedVolume: z.union([z.string(), z.number()]),
+          })),
+          executionSteps: z.array(z.object({
+            id: z.string(),
+            description: z.string(),
+            agentType: z.string(),
+            dependencies: z.array(z.any()),
+            estimatedDuration: z.union([z.string(), z.number()]),
+            priority: z.number(),
+            successCriteria: z.union([z.string(), z.array(z.string())]),
+            fallbackStrategies: z.array(z.any()),
+          })),
+          riskAssessment: z.array(z.any()),
+          contingencyPlans: z.array(z.any()),
+          qualityThresholds: z.array(z.any()),
+          estimatedTimeline: z.string(),
+          version: z.string().optional(),
+          createdAt: z.union([z.string(), z.date()]).optional(),
+          updatedAt: z.union([z.string(), z.date()]).optional(),
+          originalQuery: z.string().optional(),
+        })
       },
       prompt: `
 You are an expert research strategist. Based on the comprehensive analysis provided, create a detailed research execution plan.
@@ -234,29 +309,44 @@ Ensure the plan is actionable and accounts for parallel execution where possible
     const title = result.output?.title ?? 'Untitled Research Plan';
     return {
       id: `plan-${Date.now()}`,
-      objectives: [title, ...(result.output?.objective ? [result.output.objective] : [])], // Prepend title to objectives for preservation
+      objectives: [title, ...(result.output?.objectives ?? [])], // Prepend title to objectives for preservation
       methodology: {
         approach: this.mapMethodologyStringToEnum(result.output?.methodology), // Convert string to ResearchMethodology enum
         justification: 'Generated by AI',
         phases: [],
         qualityControls: []
       },
-      dataSources: result.output?.dataSources?.map((ds: string) => ({ type: 'web', priority: 3, credibilityWeight: 0.7, estimatedVolume: 'medium' })) || [], // Convert string array to DataSource array (simplified)
-      executionSteps: result.output?.executionSteps?.map((step: any) => ({ // Map to ResearchStep interface
+      dataSources: result.output?.dataSources?.map((ds: string) => ({
+        type: 'web',
+        source: ds,
+        priority: 3,
+        credibilityWeight: 0.7,
+        estimatedVolume: 'medium'
+      })) ?? [], // Convert string array to DataSource array (simplified)
+      executionSteps: result.output?.executionSteps?.map((step: {
+        id: string;
+        description: string;
+        agent: string;
+        dependencies?: unknown[];
+        estimatedDuration?: string | number;
+        priority?: string;
+        successCriteria?: string | string[];
+        fallbackStrategies?: unknown[];
+      }) => ({ // Map to ResearchStep interface
         id: step.id,
         description: step.description,
         agentType: step.agent as ResearchStep['agentType'], // Cast to correct agentType
-        dependencies: step.dependencies || [], // Ensure dependencies is an array
+        dependencies: step.dependencies ?? [], // Ensure dependencies is an array
         estimatedDuration: step.estimatedDuration,
-        priority: this.mapPriorityStringToNumber(step.priority), // Map string priority to number
-        successCriteria: step.successCriteria || 'N/A', // Add missing property
-        fallbackStrategies: step.fallbackStrategies || [], // Add missing property
-      })) || [], // Ensure it's always an array of ResearchStep
+        priority: step.priority, // Removed redundant assertion
+        successCriteria: step.successCriteria ?? 'N/A', // Add missing property
+        fallbackStrategies: step.fallbackStrategies ?? [], // Add missing property
+      })) ?? [], // Ensure it's always an array of ResearchStep
       riskAssessment: [], // The prompt output 'riskMitigation' is not directly mapped to ResearchPlan's 'riskAssessment' which is an array of RiskFactor.
       contingencyPlans: [], // Placeholder
       qualityThresholds: [], // Placeholder
       // Added required fields from ResearchPlan type
-      topic: result.output?.title || originalQuery,
+      topic: result.output?.title ?? originalQuery,
       estimatedTimeline: typeof result.output?.timeline === 'string'
         ? result.output.timeline
         : (queryAnalysis?.timeline ?? 'unspecified'),
@@ -266,7 +356,7 @@ Ensure the plan is actionable and accounts for parallel execution where possible
       // Removed invalid 'status' property — ResearchPlan type does not include 'status'.
     };
   }
-  
+
   /**
    * Maps a string methodology to a ResearchMethodology enum value.
    * @param methodologyString The methodology as a string.
@@ -282,18 +372,19 @@ Ensure the plan is actionable and accounts for parallel execution where possible
         return 'comparative';
       case 'case-study':
         return 'case-study';
+      case undefined: { throw new Error('Not implemented yet: undefined case') }
       default:
         return 'exploratory'; // Default to exploratory if not recognized
     }
   }
-  
+
   /**
    * Maps a string priority ('high', 'medium', 'low') to a number (1, 3, 5).
    * @param priorityString The priority as a string.
    * @returns The priority as a number.
    */
   private mapPriorityStringToNumber(priorityString?: string): 1 | 3 | 5 {
-    const p = (priorityString || 'medium').toLowerCase();
+    const p = (priorityString ?? 'medium').toLowerCase();
     switch (p) {
       case 'high':
         return 1;
@@ -352,8 +443,8 @@ class PlanningAgentExecutor implements AgentExecutor {
     const { userMessage } = requestContext;
     const existingTask = requestContext.task;
 
-    const taskId = existingTask?.id || uuidv4();
-    const contextId = userMessage.contextId || existingTask?.contextId || uuidv4();
+    const taskId = existingTask?.id ?? uuidv4();
+    const contextId = (userMessage.contextId ?? existingTask?.contextId) ?? uuidv4();
     const researchId = taskId; // For future orchestration integration
 
     console.log(
@@ -371,7 +462,7 @@ class PlanningAgentExecutor implements AgentExecutor {
           timestamp: new Date().toISOString(),
         },
         history: [userMessage],
-        metadata: userMessage.metadata,
+        metadata: userMessage.metadata ?? {},
         artifacts: [],
       };
       eventBus.publish(initialTask);
@@ -447,7 +538,7 @@ class PlanningAgentExecutor implements AgentExecutor {
 
     try {
       // 4. Extract the research query from the user message
-      const userQuery = messages[messages.length - 1]?.content?.[0]?.text || '';
+      const userQuery = messages[messages.length - 1]?.content?.[0]?.text ?? '';
       if (!userQuery) {
         throw new Error('No research query found in user message');
       }
@@ -553,12 +644,12 @@ class PlanningAgentExecutor implements AgentExecutor {
     }
   }
 
-  private parseResearchPlan(responseText: string): any {
+  private parseResearchPlan(responseText: string): unknown {
     try {
       // Try to parse JSON response
       const parsed = JSON.parse(responseText.trim());
       // The prompt returns { researchPlan: {...} } so extract the researchPlan
-      return parsed.researchPlan || parsed;
+      return parsed.researchPlan ?? parsed;
     } catch (e) {
       console.error('[PlanningAgentExecutor] Failed to parse JSON response:', e);
       console.error('[PlanningAgentExecutor] Raw response:', responseText);
@@ -586,8 +677,8 @@ const planningAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: undefined,
-  security: undefined,
+  securitySchemes: {},
+  security: [],
   defaultInputModes: ['text'],
   defaultOutputModes: ['text'],
   skills: [
@@ -629,7 +720,7 @@ async function main() {
   const expressApp = appBuilder.setupRoutes(express(), '');
 
   // 5. Start the server
-  const PORT = process.env.PLANNING_AGENT_PORT || 41245;
+  const PORT = process.env.PLANNING_AGENT_PORT ?? 41245;
   expressApp.listen(PORT, () => {
     console.log(`[PlanningAgent] Server started on http://localhost:${PORT}`);
     console.log(`[PlanningAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
@@ -640,108 +731,267 @@ async function main() {
 main().catch(console.error);
 
 /**
- * Normalize a raw plan (e.g., from a planner model) into a ResearchPlan
- * - ensures dataSources[].priority is numeric (maps 'primary'|'secondary' strings to numbers)
- * - fills minimal required fields with sensible defaults
+ * Raw shapes for incoming (untrusted) data used by normalizeResearchPlan.
+ * Use unknown-backed fields and narrow them at runtime.
  */
-export function normalizeResearchPlan(raw: Partial<ResearchPlan> | any): ResearchPlan {
-    const mapPriority = (p: any): number => {
-        if (typeof p === "number") {
-          return p;
-        }
-        if (typeof p === "string") {
-            const normalized = p.toLowerCase();
-            if (normalized === "primary") {
-              return 1;
-            }
-            if (normalized === "secondary") {
-              return 2;
-            }
-            if (normalized === "tertiary") {
-              return 3;
-            }
-        }
-        return 1; // default priority
+type RawObject = Record<string, unknown>;
+
+interface RawDataSource {
+  [k: string]: unknown;
+  type?: unknown;
+  priority?: unknown;
+  credibilityWeight?: unknown;
+  estimatedVolume?: unknown;
+}
+
+interface RawExecutionStep {
+  [k: string]: unknown;
+  id?: unknown;
+  name?: unknown;
+  action?: unknown;
+  description?: unknown;
+  agentType?: unknown;
+  dependencies?: unknown;
+  estimatedDuration?: unknown;
+  priority?: unknown;
+  successCriteria?: unknown;
+  fallbackStrategies?: unknown;
+}
+
+/** Narrowing helpers */
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+const asString = (v: unknown, fallback = ''): string =>
+  typeof v === 'string' ? v : (typeof v === 'number' ? String(v) : fallback);
+
+const asNumber = (v: unknown, fallback = NaN): number =>
+  typeof v === 'number' ? v : (typeof v === 'string' ? (Number(v) || fallback) : fallback);
+
+const asStringOrNumber = (v: unknown): string | number | undefined =>
+  typeof v === 'string' || typeof v === 'number' ? v : undefined;
+
+const mapPriorityValue = (p: unknown): number => {
+  if (typeof p === 'number' && Number.isFinite(p)) {
+    return Math.round(p);
+  }
+  if (typeof p === 'string') {
+    const normalized = p.trim().toLowerCase();
+    if (normalized === 'primary') {
+      return 1;
+    }
+    if (normalized === 'secondary') {
+      return 2;
+    }
+    if (normalized === 'tertiary') {
+      return 3;
+    }
+    const parsed = Number(normalized);
+    if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+      return Math.round(parsed);
+    }
+  }
+  return 3; // default (medium)
+};
+
+// Added helper: safely get the first non-empty string-ish field from an unknown record.
+// Avoids casting to `any` and prevents "Unexpected any" errors by using isRecord narrowing.
+const getFirstStringField = (obj: unknown, ...keys: string[]): string | undefined => {
+  if (!isRecord(obj)) {
+    return undefined;
+  }
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'string' && v.length > 0) {
+      return v;
+    }
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      return String(v);
+    }
+  }
+  return undefined;
+};
+
+/**
+ * Normalize a raw plan (e.g., from a planner model) into a ResearchPlan.
+ * Accepts:
+ *  - Partial<ResearchPlan> (already-typed)
+ *  - string (JSON payload)
+ *  - Record<string, unknown> (parsed untyped object)
+ */
+export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Record<string, unknown>): ResearchPlan {
+  // If the input is a string, parse it using the module-scoped parser.
+  let src: Record<string, unknown> | Partial<ResearchPlan>;
+  if (typeof raw === 'string') {
+    src = parseResearchPlan(raw);
+  } else {
+    src = raw;
+  }
+
+  // Normalize dataSources
+  const rawDataSources = Array.isArray((src as RawObject).dataSources) ? (src as RawObject).dataSources as unknown[] : [];
+  const dataSources = rawDataSources.length > 0
+    ? rawDataSources.map((ds: unknown) => {
+      const r = isRecord(ds) ? ds as RawDataSource : {};
+      const allowedTypes = ['academic', 'web', 'news', 'statistical', 'social', 'government'] as const;
+      const type = allowedTypes.includes(asString(r.type, 'web') as any) ? asString(r.type, 'web') as ResearchPlan['dataSources'][number]['type'] : 'web';
+      return { // Cast to ResearchPlan['dataSources'][number]
+        type: asString(r.type, 'web'),
+        priority: mapPriorityValue(r.priority),
+        credibilityWeight: typeof r.credibilityWeight === 'number' ? r.credibilityWeight : (typeof r.credibilityWeight === 'string' ? Number(r.credibilityWeight) || 0.5 : 0.5),
+        estimatedVolume: (() => {
+          const v = r.estimatedVolume;
+          if (typeof v === 'number') {
+            return v;
+          }
+          if (typeof v === 'string') {
+            const n = Number(v);
+            return Number.isFinite(n) ? n : v;
+          }
+          return 'unknown';
+        })(),
+      };
+    })
+    : [{
+      type: 'web',
+      priority: 3,
+      credibilityWeight: 0.5,
+      estimatedVolume: 'unknown',
+    }];
+
+  // Normalize executionSteps
+  const rawSteps = Array.isArray((src as RawObject).executionSteps) ? (src as RawObject).executionSteps as unknown[] : [];
+  const executionSteps = rawSteps.map((s: unknown, i: number) => {
+    const r = isRecord(s) ? s as RawExecutionStep : {};
+    const id = asString(r.id, `step-${i}`);
+    const name = asString(r.name, asString(r.action, `step-${i}`));
+    const description = asString(r.description, name);
+    const agentType = asString(r.agentType, 'web-research');
+    const dependencies = Array.isArray(r.dependencies) ? r.dependencies : [];
+    const estimatedDurationRaw = r.estimatedDuration;
+    const estimatedDuration = typeof estimatedDurationRaw === 'number'
+      ? estimatedDurationRaw
+      : (typeof estimatedDurationRaw === 'string' ? (Number(estimatedDurationRaw) || estimatedDurationRaw) : 1);
+    const priority = mapPriorityValue(r.priority);
+    const successCriteria = Array.isArray(r.successCriteria)
+      ? r.successCriteria.map((c) => asString(c, '')).filter(Boolean).join('; ')
+      : asString(r.successCriteria, 'Valid response');
+    const fallbackStrategies = Array.isArray(r.fallbackStrategies) ? r.fallbackStrategies : [];
+
+    return {
+      id,
+      name,
+      description,
+      agentType: agentType as ResearchStep['agentType'],
+      dependencies,
+      estimatedDuration,
+      priority, // Removed redundant assertion
+      successCriteria,
+      fallbackStrategies,
+    } as ResearchStep;
+  });
+
+  // Build final ResearchPlan with safe coercions
+  const srcTyped = src;
+
+  // If methodology is a loose object, narrow it with isRecord()
+  const methodologySrc = isRecord((Boolean((src as unknown))) && (src as Record<string, unknown>).methodology)
+    ? (src as Record<string, unknown>).methodology as Record<string, unknown>
+    : undefined;
+
+  // Added helper: safely extract an array field from a loose `methodology` object
+  const extractMethodologyArray = (field: string, srcTypedLocal: unknown, methodologySrcLocal?: Record<string, unknown>): string[] => {
+    const toStringSafe = (v: unknown): string | undefined => {
+      if (typeof v === 'string') {
+        const t = v.trim();
+        return t.length > 0 ? t : undefined;
+      }
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        return String(v);
+      }
+      return undefined;
     };
 
-    const dataSources = Array.isArray(raw?.dataSources) && raw.dataSources.length > 0
-        ? raw.dataSources.map((ds: any) => ({
-            type: ds.type ?? "web",
-            priority: mapPriority(ds.priority),
-            credibilityWeight: typeof ds.credibilityWeight === "number" ? ds.credibilityWeight : 0.5,
-            estimatedVolume: typeof ds.estimatedVolume === "number" ? ds.estimatedVolume : 10,
-        }))
-        : [{
-            type: "web",
-            priority: 1,
-            credibilityWeight: 0.5,
-            estimatedVolume: 10,
-        }];
+    // Priority: explicitly-parsed methodology record (methodologySrcLocal)
+    if (methodologySrcLocal && Array.isArray(methodologySrcLocal[field])) {
+      return (methodologySrcLocal[field] as unknown[])
+        .map(toStringSafe)
+        .filter((s): s is string => typeof s === 'string');
+    }
 
-    const executionSteps = Array.isArray(raw?.executionSteps)
-        ? raw.executionSteps.map((s: any, i: number) => ({
-            id: s.id ?? `step-${i}`,
-            name: s.name ?? s.action ?? `step-${i}`,
-            description: s.description ?? s.name ?? `Execute step ${i}`,
-            agentType: s.agentType ?? "web-research",
-            dependencies: Array.isArray(s.dependencies) ? s.dependencies : [],
-            estimatedDuration: typeof s.estimatedDuration === "number" ? s.estimatedDuration : (s.priority ?? 1),
-            successCriteria: Array.isArray(s.successCriteria) ? s.successCriteria : ["Valid response"],
-            fallbackStrategies: Array.isArray(s.fallbackStrategies) ? s.fallbackStrategies : [],
-        }))
-        : [];
+    // Fallback: check if top-level src has a methodology record with the field
+    if (isRecord(srcTypedLocal)) {
+      const maybeMethod = (srcTypedLocal).methodology;
+      if (isRecord(maybeMethod) && Array.isArray(maybeMethod[field])) {
+        return (maybeMethod[field] as unknown[])
+          .map(toStringSafe)
+          .filter((s): s is string => typeof s === 'string');
+      }
+    }
 
-    const plan: ResearchPlan = {
-        id: raw?.id ?? uuidv4(),
-        // Basic metadata
-        topic: raw?.topic ?? raw?.title ?? (raw?.originalQuery ?? 'Untitled Research'),
-        originalQuery: raw?.originalQuery ?? raw?.topic ?? '',
-        objectives: Array.isArray(raw?.objectives) && raw.objectives.length > 0
-            ? raw.objectives.map((o: any) => String(o))
-            : [String(raw?.objective ?? 'Define research objectives')],
+    return [];
+  };
 
-        // Methodology shape compatible with ResearchMethodology
-        methodology: {
-            approach: (raw?.methodology?.approach as ResearchMethodology['approach']) ?? 'exploratory',
-            justification: raw?.methodology?.justification ?? 'Generated by planner',
-            phases: Array.isArray(raw?.methodology?.phases) ? raw.methodology.phases : [],
-            qualityControls: Array.isArray(raw?.methodology?.qualityControls) ? raw.methodology.qualityControls : [],
-        },
+  const plan: ResearchPlan = {
+    id: typeof srcTyped.id === 'string' && srcTyped.id.length > 0 ? srcTyped.id : uuidv4(),
+    // Use the typed helper to avoid `any` casts when reading loose fields like `title`.
+    topic: asString(getFirstStringField(srcTyped, 'topic', 'title', 'originalQuery') ?? 'Untitled Research'),
+    originalQuery: asString(getFirstStringField(srcTyped, 'originalQuery', 'topic', 'title') ?? ''),
+    objectives: Array.isArray(srcTyped.objectives) && srcTyped.objectives.length > 0
+      ? (srcTyped.objectives as unknown[]).map((o: unknown) => asString(o, String(o ?? '')))
+      : [asString(getFirstStringField(srcTyped, 'objective', 'goal', 'purpose', 'summary') ?? 'Define research objectives')],
+    methodology: {
+      approach: (methodologySrc && typeof methodologySrc.approach === 'string'
+        ? (methodologySrc.approach as ResearchMethodology['approach'])
+        : (
+          // Safe narrowing: ensure srcTyped is a record before reading .methodology as string.
+          isRecord(srcTyped) && typeof (srcTyped as Record<string, unknown>).methodology === 'string'
+            ? ((srcTyped as Record<string, unknown>).methodology as ResearchMethodology['approach'])
+            : 'exploratory'
+        )
+      ),
+      // Changed: avoid `any` by narrowing possible shapes and using asString helper
+      justification: (() => {
+        // If methodologySrc is a record and has a justification, use it
+        if (methodologySrc && typeof methodologySrc.justification !== 'undefined') {
+          return asString(methodologySrc.justification, 'Generated by planner');
+        }
+        // If srcTyped.methodology is a record, try to read justification from there
+        if (isRecord(srcTyped)) {
+          const maybeMethodology = (srcTyped as Record<string, unknown>).methodology;
+          if (isRecord(maybeMethodology) && typeof maybeMethodology.justification !== 'undefined') {
+            return asString(maybeMethodology.justification, 'Generated by planner');
+          }
+        }
+        // Fallback
+        return 'Generated by planner';
+      })(),
+      // Use safe extractor to avoid `any` casts and rely on `isRecord` narrowing.
+      phases: extractMethodologyArray('phases', srcTyped, methodologySrc),
+      qualityControls: extractMethodologyArray('qualityControls', srcTyped, methodologySrc),
+    },
+    dataSources,
+    executionSteps,
+    riskAssessment: Array.isArray((srcTyped as Record<string, unknown>).riskAssessment) ? (srcTyped as Record<string, unknown>).riskAssessment as RiskFactor[] : [],
+    contingencyPlans: Array.isArray((srcTyped as Record<string, unknown>).contingencyPlans) ? (srcTyped as Record<string, unknown>).contingencyPlans as ContingencyPlan[] : [],
+    qualityThresholds: Array.isArray((srcTyped as Record<string, unknown>).qualityThresholds) ? (srcTyped as Record<string, unknown>).qualityThresholds as QualityThreshold[] : [],
+    estimatedTimeline: asString((srcTyped as Record<string, unknown>).estimatedTimeline ?? (srcTyped as Record<string, unknown>).timeline ?? 'unspecified'),
+    version: asString((srcTyped as Record<string, unknown>).version, '1.0'),
+    createdAt: (srcTyped as Record<string, unknown>).createdAt ? new Date((srcTyped as Record<string, unknown>).createdAt as string) : new Date(),
+    updatedAt: (srcTyped as Record<string, unknown>).updatedAt ? new Date((srcTyped as Record<string, unknown>).updatedAt as string) : new Date(),
+  };
 
-        // Normalized arrays produced above
-        dataSources,
-        executionSteps: executionSteps.map((s: any, i: number) => ({
-            id: s.id ?? `step-${i}`,
-            name: s.name ?? s.action ?? `step-${i}`,
-            description: s.description ?? s.name ?? `Execute step ${i}`,
-            agentType: s.agentType ?? 'web-research',
-            dependencies: Array.isArray(s.dependencies) ? s.dependencies : [],
-            estimatedDuration: typeof s.estimatedDuration === 'number'
-                ? s.estimatedDuration
-                : (typeof s.estimatedDuration === 'string' ? parseFloat(s.estimatedDuration) || 1 : 1),
-            priority: typeof s.priority === 'number'
-                ? s.priority
-                : (typeof s.priority === 'string' ? mapPriority(s.priority) : 3),
-            // Ensure successCriteria is a string (some sources may provide array)
-            successCriteria: typeof s.successCriteria === 'string'
-                ? s.successCriteria
-                : (Array.isArray(s.successCriteria) ? s.successCriteria.join('; ') : 'Valid response'),
-            fallbackStrategies: Array.isArray(s.fallbackStrategies) ? s.fallbackStrategies : [],
-        })),
+  return plan;
+}
 
-        // Risk & contingency
-        riskAssessment: Array.isArray(raw?.riskAssessment) ? raw.riskAssessment : [],
-        contingencyPlans: Array.isArray(raw?.contingencyPlans) ? raw.contingencyPlans : [],
-
-        // Additional required lists / placeholders
-        qualityThresholds: Array.isArray(raw?.qualityThresholds) ? raw.qualityThresholds : [],
-
-        // Timeline / versioning / timestamps
-        estimatedTimeline: raw?.estimatedTimeline ?? String(raw?.timeline ?? 'unspecified'),
-        version: raw?.version ?? '1.0',
-        createdAt: raw?.createdAt ? new Date(raw.createdAt) : new Date(),
-        updatedAt: raw?.updatedAt ? new Date(raw.updatedAt) : new Date(),
-    };
-
-    return plan;
+// Move parseResearchPlan to module scope and return a typed Record rather than `any`
+function parseResearchPlan(responseText: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(responseText.trim());
+    return isRecord(parsed) ? (parsed.researchPlan ?? parsed) as Record<string, unknown> : { researchPlan: parsed } as Record<string, unknown>;
+  } catch (e) {
+    console.error('[PlanningAgentExecutor] Failed to parse JSON response:', e);
+    console.error('[PlanningAgentExecutor] Raw response:', responseText);
+    throw new Error(`Failed to parse research plan: ${e instanceof Error ? e.message : 'Invalid JSON response'}`);
+  }
 }

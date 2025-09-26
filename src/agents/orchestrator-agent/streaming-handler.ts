@@ -1,4 +1,5 @@
 import type { OrchestrationState, ResearchStepExecution, ProgressUpdate, A2AMessage } from '../shared/interfaces.js';
+import type { EventEmitter } from 'events';
 
 /**
  * Streaming Handler for the Orchestrator Agent
@@ -131,15 +132,15 @@ export class StreamingHandler {
    * Get current streaming state for a research task
    */
   getStreamState(researchId: string): StreamSession | null {
-    return this.activeStreams.get(researchId) || null;
+    return this.activeStreams.get(researchId) ?? null;
   }
 
   /**
    * Get recent progress updates for a research task
    */
-  getRecentProgress(researchId: string, limit: number = 10): BufferedProgressUpdate[] {
-    const buffer = this.progressBuffers.get(researchId) || [];
-    return buffer.slice(-limit) as BufferedProgressUpdate[];
+  getRecentProgress(researchId: string, limit = 10): BufferedProgressUpdate[] {
+    const buffer = this.progressBuffers.get(researchId) ?? [];
+    return buffer.slice(-limit);
   }
 
   /**
@@ -165,9 +166,9 @@ export class StreamingHandler {
     // Convert message to progress update
     const progressUpdate: ProgressUpdate = {
       timestamp: message.timestamp,
-      message: payload.message || 'Progress update',
+      message: payload.message ?? 'Progress update',
       percentage: payload.percentage,
-      currentActivity: payload.currentActivity || 'Processing',
+      currentActivity: payload.currentActivity ?? 'Processing',
       estimatedTimeRemaining: payload.estimatedTimeRemaining
     };
 
@@ -175,7 +176,7 @@ export class StreamingHandler {
     const stepExecution: ResearchStepExecution = {
       stepId: payload.stepId,
       agentId: message.from,
-      status: payload.status || 'running',
+      status: payload.status ?? 'running',
       progressUpdates: [progressUpdate],
       retryCount: 0
     };
@@ -196,7 +197,7 @@ export class StreamingHandler {
     session.endedAt = new Date();
 
     // Notify subscribers of completion
-    const subscribers = this.streamSubscribers.get(researchId) || [];
+    const subscribers = this.streamSubscribers.get(researchId) ?? [];
     subscribers.forEach(subscriber => {
       this.sendToSubscriber(subscriber, {
         type: 'session-ended',
@@ -242,7 +243,7 @@ export class StreamingHandler {
   private calculateCompletedSteps(researchId: string): number {
     // This would be calculated from the orchestration state
     // For now, return a placeholder based on buffered updates
-    const buffer = this.progressBuffers.get(researchId) || [];
+    const buffer = this.progressBuffers.get(researchId) ?? [];
     const completedUpdates = buffer.filter((update: BufferedProgressUpdate) => update.stepStatus === 'completed');
     return new Set(completedUpdates.map((update: BufferedProgressUpdate) => update.stepId)).size;
   }
@@ -256,7 +257,7 @@ export class StreamingHandler {
       return 0;
     }
 
-    const buffer = this.progressBuffers.get(researchId) || [];
+    const buffer = this.progressBuffers.get(researchId) ?? [];
     const recentUpdates = buffer.slice(-5); // Last 5 updates
 
     if (recentUpdates.length === 0) {
@@ -267,7 +268,7 @@ export class StreamingHandler {
     return recentUpdates
       .filter(update => update.estimatedTimeRemaining !== undefined)
       .reduce((sum, update, _, arr) => {
-        const remaining = update.estimatedTimeRemaining || 0;
+        const remaining = update.estimatedTimeRemaining ?? 0;
         return sum + (remaining / arr.length);
       }, 0);
   }
@@ -276,7 +277,7 @@ export class StreamingHandler {
    * Notify all subscribers of a progress update
    */
   private notifySubscribers(researchId: string, update: BufferedProgressUpdate): void {
-    const subscribers = this.streamSubscribers.get(researchId) || [];
+    const subscribers = this.streamSubscribers.get(researchId) ?? [];
     subscribers.forEach(subscriber => {
       this.sendToSubscriber(subscriber, {
         type: 'progress-update',
@@ -293,7 +294,7 @@ export class StreamingHandler {
     try {
       if (subscriber.callback) {
         subscriber.callback(message);
-      } else if (subscriber.websocket) {
+      } else if (subscriber.websocket) { // This branch will not be used as WebSocket is removed
         subscriber.websocket.send(JSON.stringify(message));
       } else if (subscriber.eventEmitter) {
         subscriber.eventEmitter.emit('progress', message);
@@ -306,7 +307,7 @@ export class StreamingHandler {
   /**
    * Clean up inactive streams and subscribers
    */
-  cleanupInactiveStreams(maxAge: number = 3600000): void { // 1 hour default
+  cleanupInactiveStreams(maxAge = 3600000): void { // 1 hour default
     const now = Date.now();
 
     for (const [researchId, session] of this.activeStreams.entries()) {
@@ -335,12 +336,14 @@ export interface StreamSession {
   estimatedTimeRemaining: number; // minutes
 }
 
+/**
+ */
 export interface StreamSubscriber {
   subscriptionId: string;
   subscribedAt: Date;
   callback?: (message: StreamMessage) => void;
-  websocket?: any; // WebSocket connection
-  eventEmitter?: any; // Event emitter
+  websocket?: WebSocket; // WebSocket connection
+  eventEmitter?: EventEmitter; // Event emitter
 }
 
 export interface BufferedProgressUpdate extends ProgressUpdate {
