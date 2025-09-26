@@ -1,4 +1,4 @@
-import { devLocalVectorstore, devLocalIndexerRef, } from '@genkit-ai/dev-local-vectorstore';
+import { devLocalVectorstore } from '@genkit-ai/dev-local-vectorstore';
 import { googleAI } from '@genkit-ai/google-genai';
 import { genkit } from 'genkit';
 
@@ -13,6 +13,7 @@ export const ai = genkit({
       },
     ]),
   ],
+  promptDir: './src/prompts',
   model: googleAI.model('gemini-2.5-flash', {
     temperature: 0.8,
     maxOutputTokens: 65000,

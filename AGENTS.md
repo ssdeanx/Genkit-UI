@@ -73,6 +73,7 @@ Follow patterns in existing agents (e.g., [orchestrator-agent/task-delegator.ts]
 - No build step: Direct TS execution via tsx (npm scripts use tsx src/...).
 - Production: Set NODE_ENV=production; use PM2/forever for agent servers. Docker: Use [docker-compose.yaml](docker-compose.yaml) for multi-agent stack (env vars injected).
 - Deployment: Deploy agents as separate services (e.g., Vercel/Netlify for flows, Heroku for agents); use A2A gateway for discovery.
+- **Firebase App Hosting**: For serverless deployment, use `firebase deploy --only hosting:apphosting` to deploy the backend (genkit-backend in us-central1). Adapts agents/flows as callable endpoints (e.g., /orchestrator). Set secrets with `firebase functions:secrets:set GEMINI_API_KEY`. Local test: `firebase emulators:start --only functions,hosting`. See firebase.json for config.
 - CI/CD: GitHub Actions ([.github/workflows/](.github/workflows/)); run tests/lint on PRs. For agents, test A2A endpoints with mocks.
 
 ## Security Considerations

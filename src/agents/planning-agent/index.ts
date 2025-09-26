@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import express from "express";
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';  // Removed deprecated ZodTypeAny
@@ -32,7 +33,8 @@ import type {
   ResearchDimension,
   QualityThreshold,
   ContingencyPlan,
-  RiskFactor
+  RiskFactor,
+  DataSource  // Add this import
 } from "../shared/interfaces.js";
 import { QueryAnalyzer } from "./query-analyzer.js";
 import { MethodologySelector } from "./methodology-selector.js";
@@ -40,9 +42,6 @@ import { DataSourceIdentifier } from "./data-source-identifier.js";
 import { StepDecomposer } from "./step-decomposer.js";
 import { RiskAssessor } from "./risk-assessor.js";
 import { ContingencyPlanner } from "./contingency-planner.js";
-
-// Load the Genkit prompt
-const planningPrompt = ai.prompt('planning_agent');
 
 /**
  * Main executor for the Planning Agent that orchestrates all planning components
@@ -139,7 +138,16 @@ export class ResearchPlanner {
           credibilityWeight: typeof r?.credibilityWeight === 'number'
             ? r.credibilityWeight
             : (typeof r?.credibilityWeight === 'string' ? Number(r.credibilityWeight) || 0.5 : 0.5),
-          estimatedVolume: (r?.estimatedVolume && (typeof r.estimatedVolume === 'string' || typeof r.estimatedVolume === 'number')) ? r.estimatedVolume : 'medium',
+          estimatedVolume: (function() {
+            const v = r.estimatedVolume;
+            if (typeof v === 'string') {
+              const norm = v.toLowerCase();
+              if (['high', 'medium', 'low'].includes(norm)) {
+                return norm as DataSource['estimatedVolume'];
+              }
+            }
+            return 'medium' as const;
+          })(),
         } as ResearchPlan['dataSources'][number];
       });
       console.log(`ResearchPlanner: Identified ${dataSources.length} data sources`);
@@ -160,7 +168,7 @@ export class ResearchPlanner {
         queryAnalysis.estimatedScope || 'unknown',
         chosenMethodology.approach
       );
-      const riskFactors = Array.isArray(riskAssessmentRaw)
+      const riskFactors: RiskFactor[] = Array.isArray(riskAssessmentRaw)
         ? riskAssessmentRaw
         : (riskAssessmentRaw?.risks ?? []);
       console.log(`ResearchPlanner: Identified ${riskFactors.length} risk factors`);
@@ -197,163 +205,45 @@ export class ResearchPlanner {
    */
   private async generateComprehensivePlan(
     originalQuery: string,
-    queryAnalysis: QueryAnalysis, // <- typed instead of `any`
+    queryAnalysis: QueryAnalysis,
     methodologies: ResearchMethodology[],
     dataSources: ResearchPlan['dataSources'],
     researchSteps: ResearchStep[],
     riskAssessment: ResearchPlan['riskAssessment'],
     contingencyPlans: ResearchPlan['contingencyPlans']
   ): Promise<ResearchPlan> {
-    const comprehensivePlanPrompt = ai.definePrompt({
-      name: "comprehensive-research-planning",
-      input: {
-        // Use explicit Zod shapes; allow extra properties via record
-        schema: z.object({
-          query: z.string(),
-          analysis: z.record(z.string(), z.string()),
-          methodologies: z.array(z.record(z.string(), z.string())),
-          dataSources: z.array(z.object({
-            type: z.enum(['academic', 'web', 'news', 'statistical', 'social', 'government']),
-            source: z.string(),
-            priority: z.number(),
-            credibilityWeight: z.number(),
-            estimatedVolume: z.union(z.string(), z.number()),
-          })),
-          steps: z.array(z.record(z.string(), z.any())), // Use z.any() for steps as they are complex objects
-          risks: z.array(z.record(z.string(), z.string())),
-          contingencies: z.array(z.record(z.string(), z.string()))
-        }) as z.ZodSchema
-      },
-      output: {
-        // Output schema matches the canonical ResearchPlan interface as closely as possible
-        schema: z.object({
-          id: z.string().optional(),
-          topic: z.string().optional(),
-          objectives: z.array(z.string()).optional(),
-          methodology: z.object({
-            approach: z.string(),
-            justification: z.string().optional(),
-            phases: z.array(z.any()).optional(),
-            qualityControls: z.array(z.any()).optional(),
-          }).optional(),
-          dataSources: z.array(z.object({
-            type: z.string(),
-            source: z.string(),
-            priority: z.number(),
-            credibilityWeight: z.number(),
-            estimatedVolume: z.union([z.string(), z.number()]),
-          })),
-          executionSteps: z.array(z.object({
-            id: z.string(),
-            description: z.string(),
-            agentType: z.string(),
-            dependencies: z.array(z.any()),
-            estimatedDuration: z.union([z.string(), z.number()]),
-            priority: z.number(),
-            successCriteria: z.union([z.string(), z.array(z.string())]),
-            fallbackStrategies: z.array(z.any()),
-          })),
-          riskAssessment: z.array(z.any()),
-          contingencyPlans: z.array(z.any()),
-          qualityThresholds: z.array(z.any()),
-          estimatedTimeline: z.string(),
-          version: z.string().optional(),
-          createdAt: z.union([z.string(), z.date()]).optional(),
-          updatedAt: z.union([z.string(), z.date()]).optional(),
-          originalQuery: z.string().optional(),
-        })
-      },
-      prompt: `
-You are an expert research strategist. Based on the comprehensive analysis provided, create a detailed research execution plan.
+    // Load the prompt from file
+    const planningPrompt = ai.prompt('planning_agent');
 
-Original Query: {{query}}
+    // Prepare input matching prompt's expected vars (goal, now)
+    const input = {
+      goal: originalQuery,  // Use original query as goal
+      now: new Date().toISOString(),
+    };
 
-Analysis Summary:
-- Dimensions: {{analysis.dimensions}}
-- Complexity: {{analysis.complexity}}
-- Timeline: {{analysis.timeline}}
+    // Call the file-based prompt
+    const result = await planningPrompt(input);
 
-Selected Methodologies: {{methodologies}}
+    // Parse the JSON output from the prompt (expects { researchPlan: {...} })
+    const parsedOutput = JSON.parse(result.text ?? '{}');
+    const rawPlan = parsedOutput.researchPlan ?? parsedOutput;
 
-Available Data Sources: {{dataSources}}
+    // Normalize to ResearchPlan using existing function
+    const normalizedPlan = normalizeResearchPlan(rawPlan);
 
-Research Steps: {{steps}}
-
-Risk Assessment: {{risks}}
-
-Contingency Plans: {{contingencies}}
-
-Create a comprehensive research plan that integrates all this information into a cohesive execution strategy. Focus on:
-
-1. Clear objective and success criteria
-2. Logical step sequencing with dependencies
-3. Agent assignments for each step
-4. Risk mitigation strategies
-5. Realistic timeline estimates
-6. Quality assurance measures
-
-Ensure the plan is actionable and accounts for parallel execution where possible.`
-    });
-
-    const result = await comprehensivePlanPrompt({
-      query: originalQuery,
-      analysis: queryAnalysis,
-      methodologies,
-      dataSources,
-      steps: researchSteps,
-      risks: riskAssessment,
-      contingencies: contingencyPlans
-    });
-
-    // Transform the result into our ResearchPlan interface
-    const title = result.output?.title ?? 'Untitled Research Plan';
+    // Enhance with pre-computed components if needed (e.g., override with analyzed data)
     return {
-      id: `plan-${Date.now()}`,
-      objectives: [title, ...(result.output?.objectives ?? [])], // Prepend title to objectives for preservation
-      methodology: {
-        approach: this.mapMethodologyStringToEnum(result.output?.methodology), // Convert string to ResearchMethodology enum
-        justification: 'Generated by AI',
-        phases: [],
-        qualityControls: []
-      },
-      dataSources: result.output?.dataSources?.map((ds: string) => ({
-        type: 'web',
-        source: ds,
-        priority: 3,
-        credibilityWeight: 0.7,
-        estimatedVolume: 'medium'
-      })) ?? [], // Convert string array to DataSource array (simplified)
-      executionSteps: result.output?.executionSteps?.map((step: {
-        id: string;
-        description: string;
-        agent: string;
-        dependencies?: unknown[];
-        estimatedDuration?: string | number;
-        priority?: string;
-        successCriteria?: string | string[];
-        fallbackStrategies?: unknown[];
-      }) => ({ // Map to ResearchStep interface
-        id: step.id,
-        description: step.description,
-        agentType: step.agent as ResearchStep['agentType'], // Cast to correct agentType
-        dependencies: step.dependencies ?? [], // Ensure dependencies is an array
-        estimatedDuration: step.estimatedDuration,
-        priority: step.priority, // Removed redundant assertion
-        successCriteria: step.successCriteria ?? 'N/A', // Add missing property
-        fallbackStrategies: step.fallbackStrategies ?? [], // Add missing property
-      })) ?? [], // Ensure it's always an array of ResearchStep
-      riskAssessment: [], // The prompt output 'riskMitigation' is not directly mapped to ResearchPlan's 'riskAssessment' which is an array of RiskFactor.
-      contingencyPlans: [], // Placeholder
-      qualityThresholds: [], // Placeholder
-      // Added required fields from ResearchPlan type
-      topic: result.output?.title ?? originalQuery,
-      estimatedTimeline: typeof result.output?.timeline === 'string'
-        ? result.output.timeline
-        : (queryAnalysis?.timeline ?? 'unspecified'),
-      version: '1.0',
+      ...normalizedPlan,
+      // Optionally merge pre-steps, but prompt handles full plan
+      dataSources: normalizedPlan.dataSources.length > 0 ? normalizedPlan.dataSources : dataSources,
+      executionSteps: normalizedPlan.executionSteps.length > 0 ? normalizedPlan.executionSteps : researchSteps,
+      riskAssessment: normalizedPlan.riskAssessment.length > 0 ? normalizedPlan.riskAssessment : riskAssessment,
+      contingencyPlans: normalizedPlan.contingencyPlans.length > 0 ? normalizedPlan.contingencyPlans : contingencyPlans,
+      // Ensure required fields
+      topic: normalizedPlan.topic ?? originalQuery,
+      originalQuery,
       createdAt: new Date(),
       updatedAt: new Date(),
-      // Removed invalid 'status' property — ResearchPlan type does not include 'status'.
     };
   }
 
@@ -404,6 +294,8 @@ Ensure the plan is actionable and accounts for parallel execution where possible
 class PlanningAgentExecutor implements AgentExecutor {
   private cancelledTasks = new Set<string>();
   private researchPlanner: ResearchPlanner;
+  // Add a map to store contextId per taskId for use in cancelTask
+  private taskContexts = new Map<string, string>();
 
   constructor() {
     this.researchPlanner = new ResearchPlanner();
@@ -414,11 +306,16 @@ class PlanningAgentExecutor implements AgentExecutor {
     eventBus: ExecutionEventBus,
   ): Promise<void> => {
     this.cancelledTasks.add(taskId);
+    // Retrieve contextId from the stored map; throw if not found (required for the event)
+    const contextId = this.taskContexts.get(taskId);
+    if (!contextId) {
+      throw new Error(`ContextId not found for taskId: ${taskId}. Cannot cancel task.`);
+    }
     // Publish immediate cancellation event
     const cancelledUpdate: TaskStatusUpdateEvent = {
       kind: 'status-update',
       taskId, // shorthand
-      contextId: uuidv4(), // generated value stays as-is
+      contextId, // shorthand (now resolved via the map)
       status: {
         state: 'canceled',
         message: {
@@ -427,7 +324,7 @@ class PlanningAgentExecutor implements AgentExecutor {
           messageId: uuidv4(),
           parts: [{ kind: 'text', text: 'Research planning cancelled.' }],
           taskId, // shorthand
-          contextId: uuidv4(),
+          contextId, // shorthand (now resolved via the map)
         },
         timestamp: new Date().toISOString(),
       },
@@ -445,10 +342,11 @@ class PlanningAgentExecutor implements AgentExecutor {
 
     const taskId = existingTask?.id ?? uuidv4();
     const contextId = (userMessage.contextId ?? existingTask?.contextId) ?? uuidv4();
-    const researchId = taskId; // For future orchestration integration
+    // Store contextId in the map for later retrieval in cancelTask
+    this.taskContexts.set(taskId, contextId);
 
     console.log(
-      `[PlanningAgentExecutor] Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId}, research: ${researchId})`
+      `[PlanningAgentExecutor] Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId})`
     );
 
     // 1. Publish initial Task event if it's a new task
@@ -820,7 +718,6 @@ const getFirstStringField = (obj: unknown, ...keys: string[]): string | undefine
  *  - Record<string, unknown> (parsed untyped object)
  */
 export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Record<string, unknown>): ResearchPlan {
-  // If the input is a string, parse it using the module-scoped parser.
   let src: Record<string, unknown> | Partial<ResearchPlan>;
   if (typeof raw === 'string') {
     src = parseResearchPlan(raw);
@@ -828,38 +725,49 @@ export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Reco
     src = raw;
   }
 
-  // Normalize dataSources
   const rawDataSources = Array.isArray((src as RawObject).dataSources) ? (src as RawObject).dataSources as unknown[] : [];
-  const dataSources = rawDataSources.length > 0
+  const dataSources: DataSource[] = rawDataSources.length > 0
     ? rawDataSources.map((ds: unknown) => {
-      const r = isRecord(ds) ? ds as RawDataSource : {};
-      const allowedTypes = ['academic', 'web', 'news', 'statistical', 'social', 'government'] as const;
-      const type = allowedTypes.includes(asString(r.type, 'web') as any) ? asString(r.type, 'web') as ResearchPlan['dataSources'][number]['type'] : 'web';
-      return { // Cast to ResearchPlan['dataSources'][number]
-        type: asString(r.type, 'web'),
-        priority: mapPriorityValue(r.priority),
-        credibilityWeight: typeof r.credibilityWeight === 'number' ? r.credibilityWeight : (typeof r.credibilityWeight === 'string' ? Number(r.credibilityWeight) || 0.5 : 0.5),
-        estimatedVolume: (() => {
+        const r = isRecord(ds) ? ds : {};
+        const rawType = asString(r.type, 'web');
+        const type: DataSource['type'] = isValidDataSourceType(rawType) ? rawType : 'web';
+        const estimatedVolume = (() => {
           const v = r.estimatedVolume;
-          if (typeof v === 'number') {
-            return v;
-          }
           if (typeof v === 'string') {
-            const n = Number(v);
-            return Number.isFinite(n) ? n : v;
+            const norm = v.toLowerCase();
+            if (['high', 'medium', 'low'].includes(norm)) {
+              return norm as DataSource['estimatedVolume'];
+            }
           }
-          return 'unknown';
-        })(),
-      };
-    })
+          return 'medium' as const;
+        })();
+        return {
+          type,
+          source: asString(r.source, 'Unknown source'),
+          priority: mapPriorityValue(r.priority),
+          credibilityWeight: typeof r.credibilityWeight === 'number' 
+            ? Math.max(0, Math.min(1, r.credibilityWeight)) 
+            : 0.5,
+          estimatedVolume: (() => {
+            const v = r.estimatedVolume;
+            if (typeof v === 'string') {
+              const norm = v.toLowerCase();
+              if (['high', 'medium', 'low'].includes(norm)) {
+                return norm as DataSource['estimatedVolume'];
+              }
+            }
+            return 'medium' as const;
+          })()
+        };
+      })
     : [{
-      type: 'web',
-      priority: 3,
-      credibilityWeight: 0.5,
-      estimatedVolume: 'unknown',
-    }];
+        type: 'web' as const,
+        source: 'Default source',
+        priority: 3,
+        credibilityWeight: 0.5,
+        estimatedVolume: 'medium' as const,
+      }];
 
-  // Normalize executionSteps
   const rawSteps = Array.isArray((src as RawObject).executionSteps) ? (src as RawObject).executionSteps as unknown[] : [];
   const executionSteps = rawSteps.map((s: unknown, i: number) => {
     const r = isRecord(s) ? s as RawExecutionStep : {};
@@ -871,7 +779,7 @@ export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Reco
     const estimatedDurationRaw = r.estimatedDuration;
     const estimatedDuration = typeof estimatedDurationRaw === 'number'
       ? estimatedDurationRaw
-      : (typeof estimatedDurationRaw === 'string' ? (Number(estimatedDurationRaw) || estimatedDurationRaw) : 1);
+      : (typeof estimatedDurationRaw === 'string' ? Number(estimatedDurationRaw) || 1 : 1);
     const priority = mapPriorityValue(r.priority);
     const successCriteria = Array.isArray(r.successCriteria)
       ? r.successCriteria.map((c) => asString(c, '')).filter(Boolean).join('; ')
@@ -885,21 +793,16 @@ export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Reco
       agentType: agentType as ResearchStep['agentType'],
       dependencies,
       estimatedDuration,
-      priority, // Removed redundant assertion
+      priority,
       successCriteria,
       fallbackStrategies,
     } as ResearchStep;
   });
 
-  // Build final ResearchPlan with safe coercions
   const srcTyped = src;
 
-  // If methodology is a loose object, narrow it with isRecord()
-  const methodologySrc = isRecord((Boolean((src as unknown))) && (src as Record<string, unknown>).methodology)
-    ? (src as Record<string, unknown>).methodology as Record<string, unknown>
-    : undefined;
+  const methodologySrc = isRecord(srcTyped.methodology) ? srcTyped.methodology : undefined;
 
-  // Added helper: safely extract an array field from a loose `methodology` object
   const extractMethodologyArray = (field: string, srcTypedLocal: unknown, methodologySrcLocal?: Record<string, unknown>): string[] => {
     const toStringSafe = (v: unknown): string | undefined => {
       if (typeof v === 'string') {
@@ -912,14 +815,12 @@ export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Reco
       return undefined;
     };
 
-    // Priority: explicitly-parsed methodology record (methodologySrcLocal)
     if (methodologySrcLocal && Array.isArray(methodologySrcLocal[field])) {
       return (methodologySrcLocal[field] as unknown[])
         .map(toStringSafe)
         .filter((s): s is string => typeof s === 'string');
     }
 
-    // Fallback: check if top-level src has a methodology record with the field
     if (isRecord(srcTypedLocal)) {
       const maybeMethod = (srcTypedLocal).methodology;
       if (isRecord(maybeMethod) && Array.isArray(maybeMethod[field])) {
@@ -934,7 +835,6 @@ export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Reco
 
   const plan: ResearchPlan = {
     id: typeof srcTyped.id === 'string' && srcTyped.id.length > 0 ? srcTyped.id : uuidv4(),
-    // Use the typed helper to avoid `any` casts when reading loose fields like `title`.
     topic: asString(getFirstStringField(srcTyped, 'topic', 'title', 'originalQuery') ?? 'Untitled Research'),
     originalQuery: asString(getFirstStringField(srcTyped, 'originalQuery', 'topic', 'title') ?? ''),
     objectives: Array.isArray(srcTyped.objectives) && srcTyped.objectives.length > 0
@@ -943,30 +843,22 @@ export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Reco
     methodology: {
       approach: (methodologySrc && typeof methodologySrc.approach === 'string'
         ? (methodologySrc.approach as ResearchMethodology['approach'])
-        : (
-          // Safe narrowing: ensure srcTyped is a record before reading .methodology as string.
-          isRecord(srcTyped) && typeof (srcTyped as Record<string, unknown>).methodology === 'string'
-            ? ((srcTyped as Record<string, unknown>).methodology as ResearchMethodology['approach'])
-            : 'exploratory'
-        )
+        : (isRecord(srcTyped) && typeof (srcTyped as Record<string, unknown>).methodology === 'string'
+          ? ((srcTyped as Record<string, unknown>).methodology as ResearchMethodology['approach'])
+          : 'exploratory')
       ),
-      // Changed: avoid `any` by narrowing possible shapes and using asString helper
       justification: (() => {
-        // If methodologySrc is a record and has a justification, use it
         if (methodologySrc && typeof methodologySrc.justification !== 'undefined') {
           return asString(methodologySrc.justification, 'Generated by planner');
         }
-        // If srcTyped.methodology is a record, try to read justification from there
         if (isRecord(srcTyped)) {
           const maybeMethodology = (srcTyped as Record<string, unknown>).methodology;
           if (isRecord(maybeMethodology) && typeof maybeMethodology.justification !== 'undefined') {
             return asString(maybeMethodology.justification, 'Generated by planner');
           }
         }
-        // Fallback
         return 'Generated by planner';
       })(),
-      // Use safe extractor to avoid `any` casts and rely on `isRecord` narrowing.
       phases: extractMethodologyArray('phases', srcTyped, methodologySrc),
       qualityControls: extractMethodologyArray('qualityControls', srcTyped, methodologySrc),
     },
@@ -994,4 +886,12 @@ function parseResearchPlan(responseText: string): Record<string, unknown> {
     console.error('[PlanningAgentExecutor] Raw response:', responseText);
     throw new Error(`Failed to parse research plan: ${e instanceof Error ? e.message : 'Invalid JSON response'}`);
   }
+}
+
+/**
+ * Type guard for DataSource['type']
+ */
+function isValidDataSourceType(value: string): value is DataSource['type'] {
+  const allowedTypes = ['web', 'academic', 'news', 'social', 'government', 'statistical'] as const;
+  return allowedTypes.includes(value as DataSource['type']);
 }

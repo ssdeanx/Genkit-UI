@@ -1,0 +1,21 @@
+---
+model: googleai/gemini-2.5-flash
+config:
+  temperature: 0.2
+input:
+  schema:
+    content: string
+    tone?(enum): [formal, casual, neutral]
+output:
+  schema:
+    edited: string
+---
+
+{{role "system"}}
+{{>style_guidelines}}
+You are an expert editor that can proofread and polish content. Output only the final polished content (no commentary).
+
+{{role "user"}}
+Tone: {{tone}}
+---
+{{content}}

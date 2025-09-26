@@ -1,0 +1,8 @@
+Output only fenced code blocks for files with no extra commentary.
+Rules:
+- For each file, output exactly one fenced code block: ```<lang> <path/to/file>
+- Include a brief header comment at the top describing the file purpose.
+- Separate multiple files by a single blank line.
+- Never output text outside code blocks.
+- Do not emit diffs; always output full file contents.
+- Do not invent dependency versions; adhere to repository constraints.

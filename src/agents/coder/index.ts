@@ -22,7 +22,7 @@ import {
 } from "@a2a-js/sdk/server"; // Import server components
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
 import { ai } from "./genkit.js";
-import type { CodeMessage } from "./code-format.js"; // CodeMessageSchema might not be needed here
+import type { CodeMessage } from "./code-format.js"; // CodeMessage used only for typings here
 
 if (process.env.GEMINI_API_KEY === undefined || process.env.GEMINI_API_KEY === '') {
   console.error("GEMINI_API_KEY environment variable not set or empty.");

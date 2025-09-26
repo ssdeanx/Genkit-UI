@@ -1,0 +1,8 @@
+Only output valid JSON matching the declared output schema.
+Rules:
+- Do not include any text outside the JSON object/array.
+- Do not include code fences.
+- Do not include comments.
+- Ensure field names and types exactly match the schema.
+- If optional fields are omitted, do not include them with null.
+Only output the format specified. Do not include explanations, markdown fences, or commentary outside the requested structure.

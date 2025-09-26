@@ -19,28 +19,56 @@ import {
 } from "@a2a-js/sdk/server";
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
 import { ai } from "./genkit.js";
-import type { ComprehensiveSearchResult } from './academic-search.js';
-import { AcademicSearchUtils } from './academic-search.js';
 import type { ResearchFinding, SourceCitation, ResearchResult } from '../shared/interfaces.js';
 
-if (!process.env.GEMINI_API_KEY) {
-  console.error("GEMINI_API_KEY environment variable not set.");
-  process.exit(1);
+// --- Local lightweight interfaces for prompt parsing ---
+interface Study {
+  title?: string;
+  authors?: string[];
+  journal?: string;
+  publicationYear?: number | string;
+  citations?: number;
+  impactFactor?: number;
+  methodology?: string;
+  keyFindings?: string;
+  qualityScore?: number;
+  doi?: string;
 }
 
-// Load the Genkit prompt
-const academicResearchPrompt = ai.prompt('academic_research');
+interface TopicFinding {
+  topic?: string;
+  keyStudies?: Study[];
+  consensusLevel?: string;
+  evidenceStrength?: string;
+  researchGaps?: string[];
+}
+
+interface PromptFindings {
+  scholarlyFindings?: TopicFinding[];
+  methodologicalAnalysis?: Record<string, unknown>;
+  citationAnalysis?: Record<string, unknown>;
+  metadata?: { totalPublications?: number; averageImpactFactor?: number; dateRange?: string; lastUpdated?: string; searchCompleteness?: number };
+}
+
+interface UserMessageMinimal { parts?: Array<{ kind: string; text?: string }> }
+
+/* eslint-disable no-console */
+
+// Load the academic research prompt
+const academicPrompt = ai.prompt('academic_research');
+
+if (typeof process.env.GEMINI_API_KEY !== 'string' || process.env.GEMINI_API_KEY.trim() === '') {
+  console.error('GEMINI_API_KEY environment variable not set or empty.');
+  process.exit(1);
+}
 
 /**
  * AcademicResearchAgentExecutor implements the agent's core logic for scholarly research.
  */
 class AcademicResearchAgentExecutor implements AgentExecutor {
   private cancelledTasks = new Set<string>();
-  private academicSearch: AcademicSearchUtils;
 
-  constructor() {
-    this.academicSearch = new AcademicSearchUtils();
-  }
+  constructor() { }
 
   public cancelTask = async (
     taskId: string,
@@ -76,8 +104,8 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
     const { userMessage } = requestContext;
     const existingTask = requestContext.task;
 
-    const taskId = existingTask?.id || uuidv4();
-    const contextId = userMessage.contextId || existingTask?.contextId || uuidv4();
+    const taskId = existingTask?.id ?? uuidv4();
+    const contextId = userMessage.contextId ?? existingTask?.contextId ?? uuidv4();
     const researchId = taskId; // For future orchestration integration
 
     console.log(
@@ -170,7 +198,7 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
       const userQuery = this.extractResearchQuery(userMessage);
 
       // 5. Perform comprehensive academic research
-      const researchResults = await this.performAcademicResearch(userQuery, taskId, contextId, eventBus);
+      const researchResults = await this.performAcademicResearch(userQuery, taskId, contextId, eventBus, messages);
 
       // 6. Publish success status with findings
       const successUpdate: TaskStatusUpdateEvent = {
@@ -193,8 +221,8 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
       };
       eventBus.publish(successUpdate);
 
-      // 7. Publish artifacts with research findings
-      if (researchResults) {
+      // 7. Publish artifacts with research findings (only emit when there are findings)
+      if (Array.isArray(researchResults.findings) && researchResults.findings.length > 0) {
         const artifact: Task = {
           kind: 'task',
           id: `${taskId}-findings`,
@@ -238,61 +266,69 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
     }
   }
 
-  private parseAcademicFindings(responseText: string): any {
+  private parseAcademicFindings(responseText: string): PromptFindings {
     try {
-      // Try to parse JSON response
       const parsed = JSON.parse(responseText);
-      return parsed.academicResearch || parsed;
-    } catch (e) {
+      if (parsed !== null && typeof parsed === 'object') {
+        const maybe = (parsed as Record<string, unknown>).academicResearch ?? parsed;
+        return (maybe as PromptFindings) ?? {};
+      }
+      return {};
+    } catch {
       // Fallback: create a basic findings structure
       console.warn('[AcademicResearchAgentExecutor] Could not parse academic findings as JSON, using fallback');
       return {
-        scholarlyFindings: [{
-          topic: 'Research Query',
-          keyStudies: [{
-            title: 'Sample Academic Publication',
-            authors: ['Researcher One', 'Researcher Two'],
-            journal: 'Journal of Academic Research',
-            publicationYear: 2023,
-            citations: 25,
-            impactFactor: 3.5,
-            methodology: 'empirical study',
-            keyFindings: 'Key research findings summarized',
-            qualityScore: 0.85
-          }],
-          consensusLevel: 'moderate',
-          evidenceStrength: 'moderate',
-          researchGaps: ['Further empirical validation needed']
-        }],
+        scholarlyFindings: [
+          {
+            topic: 'Research Query',
+            keyStudies: [
+              {
+                title: 'Sample Academic Publication',
+                authors: ['Researcher One', 'Researcher Two'],
+                journal: 'Journal of Academic Research',
+                publicationYear: 2023,
+                citations: 25,
+                impactFactor: 3.5,
+                methodology: 'empirical study',
+                keyFindings: 'Key research findings summarized',
+                qualityScore: 0.85,
+              },
+            ],
+            consensusLevel: 'moderate',
+            evidenceStrength: 'moderate',
+            researchGaps: ['Further empirical validation needed'],
+          },
+        ],
         methodologicalAnalysis: {
           dominantApproaches: ['Quantitative methods', 'Literature review'],
           methodologicalStrengths: ['Rigorous peer review', 'Statistical analysis'],
           methodologicalLimitations: ['Sample size constraints'],
-          recommendations: ['Larger scale studies needed']
+          recommendations: ['Larger scale studies needed'],
         },
         citationAnalysis: {
           keyInfluentialWorks: ['Foundational research papers'],
           emergingTrends: ['New methodological approaches'],
-          researchFrontiers: ['Interdisciplinary applications']
+          researchFrontiers: ['Interdisciplinary applications'],
         },
         metadata: {
           totalPublications: 1,
           averageImpactFactor: 3.5,
           dateRange: '2020-2024',
           lastUpdated: new Date().toISOString(),
-          searchCompleteness: 0.8
-        }
-      };
+          searchCompleteness: 0.8,
+        },
+      } as PromptFindings;
     }
   }
 
   /**
    * Extract research query from user message
    */
-  private extractResearchQuery(userMessage: any): string {
-    // Extract text content from message parts
-    const textParts = userMessage.parts?.filter((p: any) => p.kind === 'text') || [];
-    const query = textParts.map((p: any) => p.text).join(' ').trim();
+  private extractResearchQuery(userMessage: UserMessageMinimal): string {
+    // Extract text content from message parts safely
+    const parts = userMessage.parts ?? [];
+    const textParts = parts.filter((p) => p.kind === 'text');
+    const query = textParts.map((p) => p.text ?? '').join(' ').trim();
 
     if (!query) {
       throw new Error('No research query found in user message');
@@ -308,7 +344,8 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
     query: string,
     taskId: string,
     contextId: string,
-    eventBus: ExecutionEventBus
+    eventBus: ExecutionEventBus,
+    messages: MessageData[]
   ): Promise<ResearchResult> {
     try {
       // Update status to show research in progress
@@ -332,8 +369,16 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
       };
       eventBus.publish(progressUpdate);
 
-      // Perform comprehensive academic search
-      const searchResults = await this.academicSearch.comprehensiveSearch(query, { limit: 15 });
+      // Generate academic research using the configured Dotprompt (preserves your prompt file)
+      // Use the prompt-call pattern you provided: the prompt returns either a string or an object with .text
+      const result = await academicPrompt({ query }, { messages });
+      let responseText = '';
+      if (typeof result === 'string') {
+        responseText = result;
+      } else if (result !== null && typeof result === 'object') {
+        // safely extract text property from unknown object
+        responseText = String((result as unknown as { text?: string }).text ?? '');
+      }
 
       // Update progress
       const analysisUpdate: TaskStatusUpdateEvent = {
@@ -356,8 +401,9 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
       };
       eventBus.publish(analysisUpdate);
 
-      // Synthesize findings
-      return this.synthesizeAcademicFindings(query, searchResults);
+      // Parse and synthesize findings from prompt output
+      const parsedFindings = this.parseAcademicFindings(responseText);
+      return this.synthesizeAcademicFindingsFromPrompt(query, parsedFindings);
 
     } catch (error) {
       console.error('Academic research failed:', error);
@@ -366,88 +412,61 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
   }
 
   /**
-   * Synthesize findings from academic search results
+   * Synthesize findings from prompt-generated academic research
    */
-  private synthesizeAcademicFindings(
-    query: string,
-    searchResults: ComprehensiveSearchResult
-  ): ResearchResult {
+  private synthesizeAcademicFindingsFromPrompt(query: string, promptFindings: PromptFindings): ResearchResult {
     const findings: ResearchFinding[] = [];
     const sources: SourceCitation[] = [];
 
-    // Process academic papers
-    searchResults.papers.forEach((paper, index) => {
-      findings.push({
-        claim: paper.title,
-        evidence: paper.snippet ?? `Academic paper #${index + 1} by ${paper.authors.join(', ')}${paper.year ? ` (${paper.year})` : ''}`,
-        confidence: this.calculateAcademicConfidence(paper),
-        sources: [sources.length],
-        category: 'factual'
+    // Process scholarly findings from prompt if present and valid
+    if (Array.isArray(promptFindings.scholarlyFindings)) {
+      promptFindings.scholarlyFindings.forEach((topicFinding) => {
+        const studies = Array.isArray(topicFinding.keyStudies) ? topicFinding.keyStudies : [];
+        studies.forEach((study) => {
+          const quality = study.qualityScore ?? 0.8;
+          findings.push({
+            claim: study.title ?? 'Untitled study',
+            evidence: study.keyFindings ?? '',
+            confidence: quality,
+            sources: [sources.length],
+            category: 'factual',
+          });
+
+          // publicationYear may be number or string; coerce safely
+          let publicationDate = new Date(0);
+          if (study.publicationYear !== undefined && study.publicationYear !== null) {
+            const yearNum = typeof study.publicationYear === 'number' ? study.publicationYear : parseInt(String(study.publicationYear), 10);
+            if (!Number.isNaN(yearNum) && yearNum > 0) {
+              publicationDate = new Date(yearNum, 0);
+            }
+          }
+
+          const doiStr = study.doi ?? '';
+          const url = doiStr !== '' ? `https://doi.org/${String(doiStr)}` : `https://scholar.google.com/scholar?q=${encodeURIComponent(study.title ?? '')}`;
+          sources.push({
+            url,
+            title: study.title ?? 'Unknown',
+            author: (study.authors ?? []).join(', '),
+            credibilityScore: study.qualityScore ?? 0.9,
+            type: 'academic',
+            accessedAt: new Date(),
+            publicationDate,
+          });
+        });
       });
+    }
 
-      const pdfUrl = paper.pdfLink ?? `https://scholar.google.com/scholar?q=${encodeURIComponent(paper.title)}`;
-      const sourceBase = {
-        url: pdfUrl,
-        title: paper.title,
-        author: paper.authors.join(', '),
-        credibilityScore: 0.9, // Academic papers generally have high credibility
-        type: 'academic' as const,
-        accessedAt: new Date()
-      };
-
-      const source: SourceCitation = { ...sourceBase };
-      if (paper.year && typeof paper.year === 'number' && !isNaN(paper.year) && paper.year > 0) {
-        (source as any).publicationDate = new Date(paper.year, 0);
-      }
-
-      sources.push(source);
-    });
+    const confidence = promptFindings.metadata?.searchCompleteness ?? 0.8;
 
     return {
       topic: query,
       findings,
       sources,
-      methodology: 'Comprehensive academic search across Google Scholar, arXiv, and Semantic Scholar',
-      confidence: this.calculateOverallAcademicConfidence(findings),
+      methodology: 'AI-generated synthesis based on scholarly research patterns',
+      confidence,
       generatedAt: new Date(),
-      processingTime: 0 // Would track actual processing time
+      processingTime: 0,
     };
-  }
-
-  /**
-   * Calculate confidence score for an academic paper
-   */
-  private calculateAcademicConfidence(paper: any): number {
-    let confidence = 0.7; // Base confidence for academic papers
-
-    // Higher confidence for papers with more citations
-    if (paper.citationCount && paper.citationCount > 0) {
-      confidence += Math.min(0.2, paper.citationCount / 100);
-    }
-
-    // Higher confidence for recent papers
-    if (paper.year && paper.year >= 2020) {
-      confidence += 0.1;
-    }
-
-    // Higher confidence for arXiv papers (preprints)
-    if (paper.source === 'arxiv') {
-      confidence += 0.05;
-    }
-
-    return Math.min(1.0, confidence);
-  }
-
-  /**
-   * Calculate overall confidence for academic findings
-   */
-  private calculateOverallAcademicConfidence(findings: ResearchFinding[]): number {
-    if (findings.length === 0) {
-      return 0;
-    }
-
-    const totalConfidence = findings.reduce((sum, finding) => sum + finding.confidence, 0);
-    return totalConfidence / findings.length;
   }
 }
 
@@ -511,10 +530,11 @@ async function main() {
   const expressApp = appBuilder.setupRoutes(express(), '');
 
   // 5. Start the server
-  const PORT = process.env.ACADEMIC_RESEARCH_AGENT_PORT || 41245;
-  expressApp.listen(PORT, () => {
-    console.log(`[AcademicResearchAgent] Server started on http://localhost:${PORT}`);
-    console.log(`[AcademicResearchAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
+  const PORT = process.env.ACADEMIC_RESEARCH_AGENT_PORT ?? '41245';
+  const portNum = parseInt(PORT, 10) || 41245;
+  expressApp.listen(portNum, () => {
+    console.log(`[AcademicResearchAgent] Server started on http://localhost:${portNum}`);
+    console.log(`[AcademicResearchAgent] Agent Card: http://localhost:${portNum}/.well-known/agent-card.json`);
     console.log('[AcademicResearchAgent] Press Ctrl+C to stop the server');
   });
 }

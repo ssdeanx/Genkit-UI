@@ -157,6 +157,19 @@ npm run agents:coder                # starts coder agent on port 41241
 npm run agents:content-editor       # starts content editor agent (default port 10003)
 ```
 
+## Deployment to Firebase
+
+For serverless hosting of agents/flows, use Firebase App Hosting (backend: genkit-backend in us-central1).
+
+- Auth: `gcloud auth application-default login --project=genkit-ui`
+- Secrets: `firebase functions:secrets:set GEMINI_API_KEY`
+- Local test: `firebase emulators:start --only functions,hosting`
+- Deploy: `firebase deploy --only hosting:apphosting` (builds/deploys backend)
+- Live URL: [https://genkit-backend-genkit-ui.web.app](https://genkit-backend-genkit-ui.web.app) (e.g., POST to /orchestrator for A2A tasks)
+- Logs: `firebase hosting:backends:logs genkit-backend`
+
+Adapts Express agents to callable Functions; see firebase.json for config.
+
 ---
 
 ## Local Pinecone Setup

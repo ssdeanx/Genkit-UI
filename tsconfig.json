@@ -27,7 +27,11 @@
     "src/**/*.ts",
     "eslint.config.js",
     "prettier.config.js",
-    "genkit.config.ts"
+    "genkit.config.ts",
+    "functions/**/*.ts",
+    "apphosting.yaml",
+    "firebase.json",
+    "main/**/*.ts"
   ],
   "exclude": [
     "node_modules",
