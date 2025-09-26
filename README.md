@@ -7,19 +7,16 @@
 [![A2A](https://img.shields.io/badge/A2A-^0.3.4-yellowgreen?logo=npm)](https://www.npmjs.com/package/@a2a-js/sdk)
 [![Express](https://img.shields.io/badge/Express-^4.21.2-lightgrey?logo=express)](https://expressjs.com)
 [![Genkit](https://img.shields.io/badge/Genkit-^1.19.3-orange)](https://github.com/genkit-ai)
-
 <!-- Genkit ecosystem packages -->
 [![@genkit-ai/core](https://img.shields.io/npm/v/@genkit-ai%2Fcore?label=@genkit-ai%2Fcore&logo=npm)](https://www.npmjs.com/package/@genkit-ai/core)
 [![@genkit-ai/google-genai](https://img.shields.io/npm/v/@genkit-ai%2Fgoogle-genai?label=@genkit-ai%2Fgoogle-genai&logo=npm)](https://www.npmjs.com/package/@genkit-ai/google-genai)
 [![@genkit-ai/express](https://img.shields.io/npm/v/@genkit-ai%2Fexpress?label=@genkit-ai%2Fexpress&logo=npm)](https://www.npmjs.com/package/@genkit-ai/express)
 [![@genkit-ai/mcp](https://img.shields.io/npm/v/@genkit-ai%2Fmcp?label=@genkit-ai%2Fmcp&logo=npm)](https://www.npmjs.com/package/@genkit-ai/mcp)
-
 <!-- Runtime & integrations -->
 [![prisma](https://img.shields.io/npm/v/prisma?label=prisma&logo=npm)](https://www.npmjs.com/package/prisma)
 [![firebase](https://img.shields.io/npm/v/firebase?label=firebase&logo=npm)](https://www.npmjs.com/package/firebase)
 [![serpapi](https://img.shields.io/npm/v/serpapi?label=serpapi&logo=npm)](https://www.npmjs.com/package/serpapi)
 [![wikipedia](https://img.shields.io/npm/v/wikipedia?label=wikipedia&logo=npm)](https://www.npmjs.com/package/wikipedia)
-
 <!-- Dev tooling -->
 [![zod](https://img.shields.io/npm/v/zod?label=zod&logo=npm)](https://www.npmjs.com/package/zod)
 [![tsx](https://img.shields.io/npm/v/tsx?label=tsx&logo=npm)](https://www.npmjs.com/package/tsx)
@@ -124,6 +121,18 @@ npm run agents:planning             # starts planning agent on port 41245
 npm run agents:coder                # starts coder agent on port 41241
 npm run agents:content-editor       # starts content editor agent (default port 10003)
 ```
+
+---
+
+## Local Pinecone Setup
+
+To run the local Pinecone instance, ensure you have Docker installed and run:
+
+```bash
+docker compose up -d
+```
+
+This will start two Pinecone instances: `dense-index` on port `5081` and `sparse-index` on port `5082`.
 
 ---
 

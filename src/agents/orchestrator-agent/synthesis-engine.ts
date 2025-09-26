@@ -111,13 +111,13 @@ export class SynthesisEngine {
 
             if (existingFinding) {
               // Add supporting evidence
-              const sourceName = result.sources[0]?.title || result.sources[0]?.url || `Step ${result.stepId}`;
+              const sourceName = (result.sources[0]?.title ?? result.sources[0]?.url) ?? `Step ${result.stepId}`;
               existingFinding.supportingSources.push(sourceName);
               existingFinding.evidence.push(finding.evidence);
               existingFinding.confidence = Math.max(existingFinding.confidence, finding.confidence);
             } else {
               // New finding
-              const sourceName = result.sources[0]?.title || result.sources[0]?.url || `Step ${result.stepId}`;
+              const sourceName = (result.sources[0]?.title ?? result.sources[0]?.url) ?? `Step ${result.stepId}`;
               keyFindings.push({
                 dimension,
                 finding: finding.claim,
@@ -147,7 +147,7 @@ export class SynthesisEngine {
   }> | null {
     // Try different ways to extract findings from the result data
     if (typeof result.data === 'object' && result.data !== null) {
-      const data = result.data as Record<string, any>; // Cast to a more flexible type
+      const data = result.data as Record<string, unknown>; // Cast to a more flexible type
 
       // Check if data has findings array
       if (Array.isArray(data.findings)) {
@@ -156,8 +156,8 @@ export class SynthesisEngine {
 
       // Check if data has results array with findings
       if (Array.isArray(data.results)) {
-        const { results } = data;
-        return results.flatMap((r: any) => r.findings ?? []);
+        const resultsArray = data.results as Array<{ findings?: Array<{ claim: string; evidence: string; confidence: number; }> }>;
+        return resultsArray.flatMap((r) => r.findings ?? []);
       }
 
       // Check if data itself is a finding
@@ -181,9 +181,9 @@ export class SynthesisEngine {
 
     // Fallback: try to extract from metadata (normalize and validate)
     if (Array.isArray(result.metadata?.findings)) {
-      const rawFindings = result.metadata!.findings as any[];
+      const rawFindings = result.metadata.findings;
       const normalized = rawFindings
-        .filter(f => f && (typeof f === 'object'))
+        .filter(f => Boolean(((Boolean(f)) && (typeof f === 'object'))))
         .map(f => ({
           claim: typeof f.claim === 'string' ? f.claim : String(f.claim ?? ''),
           evidence: typeof f.evidence === 'string' ? f.evidence : String(f.evidence ?? ''),
@@ -259,11 +259,11 @@ export class SynthesisEngine {
       const relevantSources = allResults.filter((r): boolean => {
         const resultDimension = r.metadata?.dimension ?? 'general';
         // Safely access 'content' property if 'data' is an object, otherwise use the data itself or an empty string.
-        const resultContent = typeof r.data === 'string' ? r.data :
-                              (typeof r.data === 'object' && r.data !== null && 'content' in r.data && typeof (r.data as any).content === 'string') ? (r.data as any).content :
+        const resultContent: string = typeof r.data === 'string' ? r.data :
+          (typeof r.data === 'object' && r.data !== null && 'content' in r.data && typeof (r.data as Record<string, unknown>).content === 'string') ? (r.data as Record<string, unknown>).content as string :
                               JSON.stringify(r.data);
         return resultDimension === finding.dimension ||
-               resultContent.toLowerCase().includes(finding.finding.toLowerCase().split(' ')[0]);
+          resultContent.toLowerCase().includes((finding.finding.toLowerCase().split(' ')[0] ?? ''));
       });
 
       const consensusLevel = relevantSources.length > 0 ?
@@ -318,8 +318,8 @@ export class SynthesisEngine {
       // Get content from result data (safe type checks to avoid TS error on 'content')
       const content = typeof result.data === 'string'
         ? result.data
-        : (typeof result.data === 'object' && result.data !== null && 'content' in result.data && typeof (result.data as any).content === 'string')
-          ? (result.data as any).content
+        : (typeof result.data === 'object' && result.data !== null && 'content' in result.data && typeof (result.data as Record<string, unknown>).content === 'string')
+          ? (result.data as Record<string, unknown>).content as string
           : JSON.stringify(result.data);
       const contentLower = content.toLowerCase();
 
@@ -329,10 +329,10 @@ export class SynthesisEngine {
         // Look for patterns that might indicate contradiction
         const sentences = content.split(/[.!?]+/);
         for (const sentence of sentences) {
-          if (sentence.toLowerCase().includes(findingLower.split(' ')[0]) &&
+          if (sentence.toLowerCase().includes(findingLower.split(' ')[0] ?? '') &&
               (sentence.toLowerCase().includes('not') || sentence.toLowerCase().includes('false') ||
                sentence.toLowerCase().includes('incorrect'))) {
-            const sourceName = result.sources[0]?.title || result.sources[0]?.url || `Step ${result.stepId}`;
+            const sourceName = (result.sources[0]?.title ?? result.sources[0]?.url) ?? `Step ${result.stepId}`;
             contradictions.push(sourceName);
             break;
           }
@@ -401,6 +401,7 @@ export class SynthesisEngine {
     }>,
     objectives: string[]
   ): string {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const highConfidenceFindings = findings.filter(f => f.confidence >= 0.8);
     const confirmedFindings = findings.filter(f => f.validationStatus === 'confirmed');
 
@@ -512,7 +513,7 @@ This synthesis was generated using a multi-agent research system that coordinate
 ${objectives.map(obj => `- **${obj}**: ${this.assessObjectiveAchievement(obj, findings)}`).join('\n')}
 
 ### Key Conclusions
-${confirmedFindings.slice(0, 3).map(f => `- ${f.finding}`).join('\n')}
+${highConfidenceFindings.slice(0, 3).map(f => `- ${f.finding}`).join('\n')}
 
 ### Recommendations for Further Research
 ${this.generateResearchRecommendations(findings, objectives)}
@@ -570,25 +571,25 @@ ${this.generateResearchRecommendations(findings, objectives)}
     objectives: string[]
   ): string {
     const recommendations: string[] = [];
- 
+
     // Check for contradictory findings
     const contradictedFindings = findings.filter(f => f.validationStatus === 'contradicted');
     if (contradictedFindings.length > 0) {
       recommendations.push(`- Investigate ${contradictedFindings.length} contradictory findings requiring manual review`);
     }
- 
+
     // Check for unconfirmed findings
     const unconfirmedFindings = findings.filter(f => f.validationStatus === 'unconfirmed');
     if (unconfirmedFindings.length > 0) {
       recommendations.push(`- Seek additional sources for ${unconfirmedFindings.length} unconfirmed findings`);
     }
- 
+
     // Check objective coverage
     const coveredObjectives = objectives.filter(obj => {
       const keyword = this.extractKeyword(obj);
       return keyword.length > 0 && findings.some(f => f.finding.toLowerCase().includes(keyword));
     });
- 
+
     if (coveredObjectives.length < objectives.length) {
       recommendations.push(`- Expand research scope for ${objectives.length - coveredObjectives.length} uncovered objectives`);
     }
@@ -617,8 +618,8 @@ ${this.generateResearchRecommendations(findings, objectives)}
       const relevantResults = results.filter((r): boolean => {
         const content = typeof r.data === 'string'
           ? r.data
-          : (typeof r.data === 'object' && r.data !== null && 'content' in r.data && typeof (r.data as any).content === 'string')
-            ? (r.data as any).content
+          : (typeof r.data === 'object' && r.data !== null && 'content' in r.data && typeof (r.data as Record<string, unknown>).content === 'string')
+            ? (r.data as Record<string, unknown>).content as string
             : JSON.stringify(r.data);
         return keyword.length > 0 && content.toLowerCase().includes(keyword);
       });
@@ -669,20 +670,20 @@ ${this.generateResearchRecommendations(findings, objectives)}
       // Count source types from sources array (coerce to string)
       result.sources.forEach(source => {
         const typeKey = String(source.type ?? 'unknown');
-        sourceTypes[typeKey] = (sourceTypes[typeKey] || 0) + 1;
+        sourceTypes[typeKey] = (sourceTypes[typeKey] ?? 0) + 1;
       });
- 
+
       // Count contributions per source (use first source as identifier)
       const sourceName = String(result.sources[0]?.title ?? result.sources[0]?.url ?? `Step ${result.stepId}`);
-      sourceContributions[sourceName] = (sourceContributions[sourceName] || 0) + 1;
+      sourceContributions[sourceName] = (sourceContributions[sourceName] ?? 0) + 1;
     }
- 
+
     // Get top contributing sources
     const topSources = Object.entries(sourceContributions)
       .sort(([,a], [,b]) => b - a)
       .slice(0, 10)
       .map(([source, contributionCount]) => ({ source, contributionCount }));
- 
+
     return {
       totalSources: results.length,
       sourceTypes,
@@ -695,10 +696,11 @@ ${this.generateResearchRecommendations(findings, objectives)}
    * Always returns a string (possibly empty) to avoid undefined indexing issues.
    */
   private extractKeyword(phrase?: string): string {
-    if (!phrase) {
+    const trimmed = phrase?.trim() ?? '';
+    if (trimmed === '') {
       return '';
     }
-    const parts = phrase.trim().toLowerCase().split(/\s+/);
+    const parts = trimmed.toLowerCase().split(/\s+/);
     // Return first token or empty string; use nullish coalescing to avoid 'undefined' type
     return parts[0] ?? '';
   }
@@ -799,9 +801,7 @@ ${this.generateResearchRecommendations(findings, objectives)}
     for (const f of findings) {
       const dim = String(f.dimension ?? 'general');
       const c = typeof f.confidence === 'number' ? Math.max(0, Math.min(1, f.confidence)) : 0;
-      if (!byDimSums[dim]) {
-        byDimSums[dim] = { sum: 0, count: 0 };
-      }
+      byDimSums[dim] ??= { sum: 0, count: 0 };
       byDimSums[dim].sum += c;
       byDimSums[dim].count += 1;
     }

@@ -1,5 +1,5 @@
 import type { ResearchStep, ResearchStepExecution, TaskRequest, AgentType, OrchestrationState } from '../shared/interfaces.js';
-import { A2ACommunicationManager } from './a2a-communication.js';
+import type { A2ACommunicationManager } from './a2a-communication.js';
 
 /**
  * Task Delegation System for the Orchestrator Agent
@@ -100,7 +100,7 @@ export class TaskDelegator {
       progressUpdates: [],
       retryCount: 0,
       startedAt: new Date(),
-      result: null // Add result property to store task response
+      result: null   // Add result property to store task response
     };
 
     try {
@@ -164,7 +164,7 @@ export class TaskDelegator {
   type: this.mapStepToTaskType(step),
   parameters: taskParameters,
   // The 'step' property is required by TaskRequest
-  step: step,
+    step,
   priority: step.priority,
   timeout: step.estimatedDuration * 60000, // Convert minutes to milliseconds
   metadata: {
@@ -182,7 +182,7 @@ export class TaskDelegator {
   private extractTaskParameters(
     step: ResearchStep,
     orchestrationState: OrchestrationState
-  ): Record<string, any> {
+  ): Record<string, unknown> {
     // Base parameters available to all tasks
     const baseParams = {
       topic: orchestrationState.plan.topic,
@@ -230,6 +230,8 @@ export class TaskDelegator {
           visualizationRequired: step.description.includes('visualize') || step.description.includes('chart')
         };
 
+      case "planning": { throw new Error('Not implemented yet: "planning" case') }
+      case "orchestrator": { throw new Error('Not implemented yet: "orchestrator" case') }
       default:
         return baseParams;
     }
@@ -276,6 +278,8 @@ export class TaskDelegator {
         }
         return 'statistical-analysis';
 
+      case "planning": { throw new Error('Not implemented yet: "planning" case') }
+      case "orchestrator": { throw new Error('Not implemented yet: "orchestrator" case') }
       default:
         return 'general-research';
     }

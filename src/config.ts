@@ -1,9 +1,18 @@
+import { devLocalVectorstore, devLocalIndexerRef, } from '@genkit-ai/dev-local-vectorstore';
 import { googleAI } from '@genkit-ai/google-genai';
 import { genkit } from 'genkit';
 
 // Initialize Genkit with the Google AI plugin
 export const ai = genkit({
-  plugins: [googleAI()],
+  plugins: [
+    googleAI(),
+    devLocalVectorstore([
+      {
+        indexName: 'menuQA',
+        embedder: googleAI.embedder('gemini-embedding-001'),
+      },
+    ]),
+  ],
   model: googleAI.model('gemini-2.5-flash', {
     temperature: 0.8,
     maxOutputTokens: 65000,

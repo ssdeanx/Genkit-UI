@@ -24,9 +24,6 @@ export default [
       },
     },
     settings: {
-    react: {
-      version: 'detect',
-      },
     },
     rules: {
 //      ...reactPlugin.configs.recommended.rules,
@@ -51,7 +48,7 @@ export default [
       '@typescript-eslint/prefer-as-const': 'warn',
       '@typescript-eslint/consistent-type-definitions': ['error', 'interface'],
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
-      '@typescript-eslint/no-import-type-side-effects': 'error',
+      '@typescript-eslint/no-import-type-side-effects': 'warn',
       '@typescript-eslint/array-type': ['error', { default: 'array-simple' }],
       '@typescript-eslint/member-ordering': [
         'warn',
@@ -80,9 +77,6 @@ export default [
       // Additional code quality rules
       'eqeqeq': ['error', 'always'],
       'curly': ['error', 'all'],
-      'no-multiple-empty-lines': ['error', { max: 2 }],
-      'no-trailing-spaces': 'warn',
-      'eol-last': 'warn',
     }
   },
   {
@@ -94,7 +88,12 @@ export default [
       'vitest.config.ts',
       'globalSetup.ts',
       'testSetup.ts',
-      'vite.config.ts'
+      'vite.config.ts',
+      '.genkit/**',
+      '.github/**',
+      '.gemini/**',
+      'plans/**',
+      'chroma/**'
     ]
   }
 ]
