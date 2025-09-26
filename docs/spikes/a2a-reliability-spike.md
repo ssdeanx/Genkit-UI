@@ -7,7 +7,21 @@ timebox: "4 days"
 created: 2025-09-26
 updated: 2025-09-26
 owner: "team"
-tags: ["technical-spike", "architecture", "a2a"]
+tags:
+  - "technical-spike"
+  - "architecture"
+  - "a2a"
+  - "reliability"
+  - "resiliency"
+  - "retry"
+  - "timeout"
+  - "monitoring"
+  - "observability"
+  - "metrics"
+  - "mcp"
+  - "orchestrator"
+  - "agent"
+  - "genkit"
 ---
 
 # A2A Reliability & Resiliency Spike
@@ -60,18 +74,21 @@ This spike is complete when:
 ## Technical Context
 
 **Related Components:**
-- `src/mcp/mcpClient.ts`
-- `src/mcp/mcpServer.ts`
-- `src/agents/orchestrator-agent/task-delegator.ts`
-- `src/agents/orchestrator-agent/a2a-communication.ts`
-- `src/agents/orchestrator-agent/streaming-handler.ts`
-- `src/cli.ts` (for local testing)
+
+- [mcpClient.ts](../../src/mcp/mcpClient.ts)
+- [mcpServer.ts](../../src/mcp/mcpServer.ts)
+- [task-delegator.ts](../../src/agents/orchestrator-agent/task-delegator.ts)
+- [a2a-communication.ts](../../src/agents/orchestrator-agent/a2a-communication.ts)
+- [streaming-handler.ts](../../src/agents/orchestrator-agent/streaming-handler.ts)
+- [cli.ts](../../src/cli.ts) (for local testing)
 
 **Dependencies:**
+
 - `@a2a-js/sdk`
 - Genkit A2A patterns and existing `ai` flows in `src/agents/*/genkit.ts`
 
 **Constraints:**
+
 - Local development must remain lightweight—prototype should not require cloud infra.
 - Avoid aggressive retry behavior that may duplicate expensive model calls.
 

@@ -7,7 +7,14 @@ timebox: "3 days"
 created: 2025-09-26
 updated: 2025-09-26
 owner: "team"
-tags: ["technical-spike", "platform", "gemini"]
+tags:
+  - "technical-spike"
+  - "platform"
+  - "gemini"
+    - "cost"
+    - "configuration"
+    - "monitoring"
+    - "genkit"
 ---
 
 # Gemini Model Cost & Configuration Spike
@@ -27,6 +34,7 @@ tags: ["technical-spike", "platform", "gemini"]
 **Primary Question:** Which Gemini model variant and Genkit options provide the best balance of cost, latency, and feature set (structured output + tool calling) for our agent workflows?
 
 **Secondary Questions:**
+
 - When should streaming be enabled vs disabled for cost and UX tradeoffs?
 - Which options (groundedGeneration, structuredOutput) materially impact cost or token usage?
 - What logging/monitoring should we add to measure per-agent model usage and costs?
@@ -34,6 +42,7 @@ tags: ["technical-spike", "platform", "gemini"]
 ## Investigation Plan
 
 ### Research Tasks
+
 - [ ] Inventory current model usage (`src/config.ts`) and which flows call the model synchronously vs streaming.
 - [ ] Research Gemini pricing and model feature matrix for structured outputs and streaming support.
 - [ ] Run quick latency/cost experiments using sample prompts from `src/flows/` (recipe + weather) to estimate token usage and latency with two model choices.
@@ -42,20 +51,24 @@ tags: ["technical-spike", "platform", "gemini"]
 
 ### Success Criteria
 This spike is complete when:
+
 - [ ] A recommended default config for `src/config.ts` is documented.
 - [ ] A small test script exists that can estimate token usage for a sample prompt.
 - [ ] Monitoring hooks for token/count metrics are suggested (where and how to emit them).
 
 ## Technical Context
 **Related Components:**
-- `src/config.ts` (current model selection and Genkit options)
-- Flows & agents in `src/flows/` and `src/agents/*/genkit.ts`
+
+- [config.ts](../../src/config.ts) (current model selection and Genkit options)
+- Flows & agents in [src/flows/](../../src/flows/) and [src/agents/*/genkit.ts](../../src/agents/*/genkit.ts)
 
 **Dependencies:**
+
 - Gemini API docs/pricing
 - Genkit options and plugin behavior
 
 **Constraints:**
+
 - Real cost testing requires a Gemini API key; experiments may be limited in local dev without a key.
 
 ## Research Findings
@@ -64,6 +77,7 @@ This spike is complete when:
 [Record findings here]
 
 ### External Resources
+
 - Gemini pricing and model docs
 - Genkit structured output and tool-calling docs
 
@@ -73,10 +87,12 @@ This spike is complete when:
 [Write recommendation after experiments]
 
 ### Follow-up Actions
+
 - [ ] Update `src/config.ts` with dev/prod profiles and document their differences in `GEMINI.md`.
 - [ ] Add a small script to measure token usage for sample flows.
 
 ## Status History
+
 | Date | Status | Notes |
 | ---- | ------ | ----- |
 | 2025-09-26 | 🔴 Not Started | Spike created and scoped |
