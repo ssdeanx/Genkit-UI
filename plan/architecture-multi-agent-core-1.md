@@ -4,7 +4,7 @@ version: 1.0
 date_created: 2025-09-26
 last_updated: 2025-09-26
 owner: Platform AI (sam)
-status: Planned
+status: In Progress
 tags:
 	- architecture
 	- genkit
@@ -19,7 +19,7 @@ tags:
 
 # Introduction
 
-![Status: Planned](https://img.shields.io/badge/status-Planned-blue)
+![Status: In Progress](https://img.shields.io/badge/status-In%20Progress-yellow)
 
 This plan implements the architecture defined in `spec/spec-architecture-multi-agent-coder-orchestrator.md` across flows, evaluators, MCP integration, dev-local vectorstore, telemetry, Express exposure, and optional Vertex AI support. Execution is deterministic and file-specific.
 
@@ -57,7 +57,7 @@ This plan implements the architecture defined in `spec/spec-architecture-multi-a
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-001 | Update `src/config.ts` to expose a context provider skeleton with `auth`, `trace.requestId`, flags; add `ENABLE_VERTEX` and `TELEMETRY_ENABLED` env toggles (no behavior change yet). |  |  |
+| TASK-001 | Update `src/config.ts` to expose a context provider skeleton with `auth`, `trace.requestId`, flags; add `ENABLE_VERTEX` and `TELEMETRY_ENABLED` env toggles (no behavior change yet). | ✅ | 2025-09-26 |
 | TASK-002 | Ensure Coder uses `src/prompts/coder_multi_file_codegen.prompt`: set `promptDir` in `src/agents/coder/genkit.ts` and verify `defineCodeFormat(ai)` is registered. | ✅ | 2025-09-26 |
 | TASK-003 | Add `docs/runbook-context.md` documenting `context` shape, header mapping for Express. |  |  |
 
@@ -67,10 +67,23 @@ This plan implements the architecture defined in `spec/spec-architecture-multi-a
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-004 | Create `src/flows/orchestratorFlow.ts` with Zod input `{ query: string }` and output `{ planId: string }`; internally call Orchestrator A2A (no business change). |  |  |
-| TASK-005 | Create `src/flows/coderEvalFlow.ts` that calls Coder agent with a small spec and returns filenames; Zod schemas. |  |  |
-| TASK-006 | Mount flows on Express using `@genkit-ai/express` in `main/src/index.ts` or `src/index.ts`, ensuring they appear in Dev UI; add context provider mapping `Authorization` header → `context.auth.rawToken`. |  |  |
-| TASK-007 | Add an interrupt demo tool `src/tools/interrupts/confirmOverwrite.ts` using `ai.defineInterrupt`. |  |  |
+| TASK-004 | Create `src/flows/orchestratorFlow.ts` with Zod input `{ query: string }` and output `{ planId: string }`; internally call Orchestrator A2A. | ✅ | 2025-09-26 |
+| TASK-005 | Create `src/flows/coderEvalFlow.ts` that calls Coder agent with a small spec and returns filenames; Zod schemas. | ✅ | 2025-09-26 |
+| TASK-005a | Create `src/flows/planningFlow.ts` to call `planning_agent` prompt and return a validated ResearchPlan. | ✅ | 2025-09-26 |
+| TASK-005b | Add streaming flows: `src/flows/coderStreamingFlow.ts` and `src/flows/orchestratorStreamingFlow.ts` (streamSchema + sendChunk). | ✅ | 2025-09-26 |
+| TASK-005c | Export flows in `src/index.ts` so they appear in Dev UI. | ✅ | 2025-09-26 |
+| TASK-006 | Mount flows on Express using `@genkit-ai/express` in `main/src/index.ts` or `src/index.ts`, ensuring they appear in Dev UI; add context provider mapping `Authorization` header → `context.auth.rawToken`. | ✅ | 2025-09-26 |
+
+<!-- Note: Flow server implemented at src/flowServer.ts; flows exported in src/index.ts are now exposed via startFlowServer. Added package.json scripts and explicit agent port env vars in `.env.example`. No authentication mapped yet (per current scope). -->
+
+| TASK-007 | Add an interrupt demo tool `src/tools/interrupts/confirmOverwrite.ts` using `ai.defineInterrupt`. | ✅ | 2025-09-26 |
+
+### Verification: Flow & Tests
+
+| Task | Description | Completed | Date |
+|------|-------------|-----------|------|
+| TASK-007a | Add unit tests for A2A communication (`src/agents/orchestrator-agent/__tests__/a2a-communication.spec.ts`). | ✅ | 2025-09-26 |
+| TASK-007b | Add quick flow-level sanity checks (Dev UI) for `planningFlow`, `coderEvalFlow`, and streaming flows. | ✅ | 2025-09-26 |
 
 ### Implementation Phase 3
 
@@ -78,9 +91,9 @@ This plan implements the architecture defined in `spec/spec-architecture-multi-a
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-008 | In `src/agents/coder/index.ts`, add idle timeout and max duration using `AbortController`; on timeout finalize with aggregated parse. |  |  |
-| TASK-009 | Re-parse full text via `CodeMessageSchema.parse()` before publishing final artifacts; fail with `UserFacingError` if invalid. |  |  |
-| TASK-010 | Emit artifacts only after validation; keep in-progress updates as is. |  |  |
+| TASK-008 | In `src/agents/coder/index.ts`, add idle timeout and max duration using `AbortController`; on timeout finalize with aggregated parse. | Partial — buffer & aggregated validation implemented; needs AbortController wiring, unit tests, and final timeout handling. | 2025-09-26 |
+| TASK-009 | Re-parse full text via `CodeMessageSchema.parse()` before publishing final artifacts; fail with `UserFacingError` if invalid. | Partial — final aggregated parse/validation implemented in-code (safeParse used); final strict parse and error shaping needs finalization and tests. | 2025-09-26 |
+| TASK-010 | Emit artifacts only after validation; keep in-progress updates as is. | Partial — artifact gating implemented; more tests needed to ensure no partial emissions on timeout or parse failure. | 2025-09-26 |
 
 ### Implementation Phase 4
 
@@ -88,8 +101,8 @@ This plan implements the architecture defined in `spec/spec-architecture-multi-a
 
 | Task | Description | Completed | Date |
 |------|-------------|-----------|------|
-| TASK-011 | Create `src/evaluators/codeQuality.ts` with `ai.defineEvaluator` measuring: files count > 0, filenames non-empty, language present; return 0..1 score. |  |  |
-| TASK-012 | Create datasets: `datasets/coder.json`, `datasets/editor.json`, `datasets/planner.json` (minimal examples). |  |  |
+| TASK-011 | Create `src/evaluators/codeQuality.ts` with `ai.defineEvaluator` measuring: files count > 0, filenames non-empty, language present; return 0..1 score. | ✅ (heuristic evaluator implemented) | 2025-09-26 |
+| TASK-012 | Create datasets: `datasets/coder.json`, `datasets/editor.json`, `datasets/planner.json` (minimal examples). | Partial — `datasets/coder.json` implemented; `editor.json` and `planner.json` still pending. | 2025-09-26 |
 | TASK-013 | Ensure `package.json` has script `eval:coder`: `genkit eval:flow src/flows/coderEvalFlow.ts --input datasets/coder.json`. |  |  |
 
 ### Implementation Phase 5

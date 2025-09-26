@@ -7,9 +7,17 @@
   "scripts": {
     "test": "vitest",
     "genkit:ui": "dotenvx run -- genkit start -- npx tsx --watch src/index.ts",
+    "flow:serve": "dotenvx run -- npx tsx src/flowServer.ts",
+    "flow:serve:dev": "dotenvx run -- npx tsx --watch src/flowServer.ts",
     "a2a:cli": "dotenvx run -- npx tsx src/cli.ts",
     "agents:coder": "dotenvx run -- npx tsx src/agents/coder/index.ts",
-    "agents:content-editor": "dotenvx run -- npx tsx src/agents/content-editor/index.ts"
+    "agents:content-editor": "dotenvx run -- npx tsx src/agents/content-editor/index.ts",
+    "agents:orchestrator": "dotenvx run -- npx tsx src/agents/orchestrator-agent/index.ts",
+    "agents:planning": "dotenvx run -- npx tsx src/agents/planning-agent/index.ts",
+    "agents:academic": "dotenvx run -- npx tsx src/agents/academic-research-agent/index.ts",
+    "agents:news": "dotenvx run -- npx tsx src/agents/news-research-agent/index.ts",
+    "agents:data-analysis": "dotenvx run -- npx tsx src/agents/data-analysis-agent/index.ts",
+    "agents:web-research": "dotenvx run -- npx tsx src/agents/web-research-agent/index.ts"
   },
   "keywords": [],
   "author": "ssdeanx",
@@ -53,6 +61,7 @@
     "@genkit-ai/tools-common": "^1.20.0",
     "@toolbox-sdk/core": "^0.1.2",
     "body-parser": "^2.2.0",
+    "concurrently": "^9.2.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "firebase": "^12.3.0",

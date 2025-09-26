@@ -1,0 +1,6 @@
+When including metadata about generation, attach a `meta` object to the top-level output (if the schema allows) containing:
+- `requestId`: string (use the provided requestId from context if present)
+- `source`: optional string indicating source of retrieved content
+- `timestamp`: optional ISO 8601 string
+
+If the output schema does not include a `meta` field, do not add it. Only include metadata when explicitly requested.

@@ -20,7 +20,7 @@ export const recipeGeneratorFlow: Flow<typeof RecipeInputSchema, typeof RecipeSc
     // Create a prompt based on the input
     const prompt = `Create a recipe with the following requirements:
       Main ingredient: ${input.ingredient}
-      Dietary restrictions: ${input.dietaryRestrictions || 'none'}`;
+      Dietary restrictions: ${input.dietaryRestrictions ?? 'none'}`;
 
     // Generate structured recipe data using the same schema
     const { output } = await ai.generate({

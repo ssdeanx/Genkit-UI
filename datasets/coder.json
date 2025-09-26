@@ -1,0 +1,7 @@
+[
+  {
+    "specification": "Create a small JavaScript module that exports a function `sum` which returns the sum of an array of numbers.",
+    "language": "javascript",
+    "expectedFilenames": ["sum.js"]
+  }
+]

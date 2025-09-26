@@ -1,1 +1,7 @@
 Write concisely. Prefer measurable, testable criteria. Use consistent terminology and avoid ambiguity.
+
+- Use active voice and short sentences.
+- For lists, return JSON arrays with deterministic ordering.
+- Use neutral, professional tone unless otherwise requested.
+- For generated code files include a single-line top comment summarizing the file's purpose.
+- Avoid extra explanations or commentary unless explicitly asked.

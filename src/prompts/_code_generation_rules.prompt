@@ -1,0 +1,8 @@
+Code generation rules:
+
+- Each generated file should start with a single-line top comment describing purpose, e.g. `// This file implements X` or `# This file implements X` depending on language.
+- Maintain consistent indentation and avoid trailing whitespace.
+- Prefer idiomatic constructs for the target language; if unspecified, use conservative, well-tested patterns.
+- When producing TypeScript or JSX, include `// @ts-check` or `"use client";` only if requested.
+- Do not include non-deterministic timestamps or user-specific data in generated code.
+- Ensure exported symbols are named clearly and used consistently across files.

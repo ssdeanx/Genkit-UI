@@ -1,7 +1,6 @@
 /* eslint-disable no-console */
 import express from "express";
 import { v4 as uuidv4 } from 'uuid';
-import { z } from 'zod';  // Removed deprecated ZodTypeAny
 
 import type { MessageData } from "genkit";
 import type {
@@ -42,6 +41,7 @@ import { DataSourceIdentifier } from "./data-source-identifier.js";
 import { StepDecomposer } from "./step-decomposer.js";
 import { RiskAssessor } from "./risk-assessor.js";
 import { ContingencyPlanner } from "./contingency-planner.js";
+import { askClarifyingQuestion, confirmActionTool } from "../../tools/interrupts/index.js";
 
 /**
  * Main executor for the Planning Agent that orchestrates all planning components
@@ -134,7 +134,7 @@ export class ResearchPlanner {
         return {
           type,
           source: typeof r?.source === 'string' ? r.source : (typeof ds === 'string' ? ds : ''),
-          priority: typeof r?.priority === 'number' ? r.priority : this.mapPriorityStringToNumber(typeof r?.priority === 'string' ? r.priority : undefined),
+          priority: mapPriorityValue(r.priority),
           credibilityWeight: typeof r?.credibilityWeight === 'number'
             ? r.credibilityWeight
             : (typeof r?.credibilityWeight === 'string' ? Number(r.credibilityWeight) || 0.5 : 0.5),
@@ -221,8 +221,14 @@ export class ResearchPlanner {
       now: new Date().toISOString(),
     };
 
-    // Call the file-based prompt
-    const result = await planningPrompt(input);
+    // Call the file-based prompt and allow it to call interrupt tools for clarification/confirmation
+    const result = await planningPrompt(input, {
+      tools: [askClarifyingQuestion, confirmActionTool],
+      context: {
+        analysis: queryAnalysis,
+        methodologies,
+      },
+    });
 
     // Parse the JSON output from the prompt (expects { researchPlan: {...} })
     const parsedOutput = JSON.parse(result.text ?? '{}');
@@ -286,6 +292,42 @@ export class ResearchPlanner {
         return 3; // Default to medium priority
     };
   }
+
+  /**
+   * Convert a generated ResearchPlan into a lightweight OrchestrationState.
+   * This provides a typed bridge between the planning output and the orchestrator
+   * execution model so downstream agents can start execution.
+   */
+  public orchestrationStateFromPlan(
+    plan: ResearchPlan,
+    activeSteps: ResearchStepExecution[] = [],
+    issues: OrchestrationIssue[] = []
+  ): OrchestrationState {
+    const totalSteps = Array.isArray(plan.executionSteps) ? plan.executionSteps.length : 0;
+    const completedStepsCount = 0; // planner doesn't run steps - execution will update this
+    const estimatedTimeRemaining = plan.executionSteps.reduce((acc, s) => acc + (s.estimatedDuration ?? 0), 0);
+
+    const progress = {
+      completedSteps: completedStepsCount,
+      totalSteps,
+      estimatedTimeRemaining,
+      overallConfidence: 0.75, // heuristic default until execution updates it
+    } as OrchestrationState['progress'];
+
+    const state: OrchestrationState = {
+      researchId: plan.id,
+      plan,
+      currentPhase: 'planning',
+      activeSteps,
+      completedSteps: [],
+      issues,
+      progress,
+      startedAt: new Date(),
+      lastUpdated: new Date(),
+    };
+
+    return state;
+  }
 }
 
 /**
@@ -308,7 +350,7 @@ class PlanningAgentExecutor implements AgentExecutor {
     this.cancelledTasks.add(taskId);
     // Retrieve contextId from the stored map; throw if not found (required for the event)
     const contextId = this.taskContexts.get(taskId);
-    if (!contextId) {
+    if (typeof contextId !== 'string' || contextId.trim().length === 0) {
       throw new Error(`ContextId not found for taskId: ${taskId}. Cannot cancel task.`);
     }
     // Publish immediate cancellation event
@@ -670,11 +712,12 @@ const asStringOrNumber = (v: unknown): string | number | undefined =>
   typeof v === 'string' || typeof v === 'number' ? v : undefined;
 
 const mapPriorityValue = (p: unknown): number => {
-  if (typeof p === 'number' && Number.isFinite(p)) {
-    return Math.round(p);
+  const v = asStringOrNumber(p);
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    return Math.round(v);
   }
-  if (typeof p === 'string') {
-    const normalized = p.trim().toLowerCase();
+  if (typeof v === 'string') {
+    const normalized = v.trim().toLowerCase();
     if (normalized === 'primary') {
       return 1;
     }
@@ -690,24 +733,6 @@ const mapPriorityValue = (p: unknown): number => {
     }
   }
   return 3; // default (medium)
-};
-
-// Added helper: safely get the first non-empty string-ish field from an unknown record.
-// Avoids casting to `any` and prevents "Unexpected any" errors by using isRecord narrowing.
-const getFirstStringField = (obj: unknown, ...keys: string[]): string | undefined => {
-  if (!isRecord(obj)) {
-    return undefined;
-  }
-  for (const k of keys) {
-    const v = obj[k];
-    if (typeof v === 'string' && v.length > 0) {
-      return v;
-    }
-    if (typeof v === 'number' && Number.isFinite(v)) {
-      return String(v);
-    }
-  }
-  return undefined;
 };
 
 /**
@@ -730,17 +755,7 @@ export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Reco
     ? rawDataSources.map((ds: unknown) => {
         const r = isRecord(ds) ? ds : {};
         const rawType = asString(r.type, 'web');
-        const type: DataSource['type'] = isValidDataSourceType(rawType) ? rawType : 'web';
-        const estimatedVolume = (() => {
-          const v = r.estimatedVolume;
-          if (typeof v === 'string') {
-            const norm = v.toLowerCase();
-            if (['high', 'medium', 'low'].includes(norm)) {
-              return norm as DataSource['estimatedVolume'];
-            }
-          }
-          return 'medium' as const;
-        })();
+      const type: DataSource['type'] = isValidDataSourceType(rawType) ? rawType : 'web';
         return {
           type,
           source: asString(r.source, 'Unknown source'),
@@ -777,9 +792,7 @@ export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Reco
     const agentType = asString(r.agentType, 'web-research');
     const dependencies = Array.isArray(r.dependencies) ? r.dependencies : [];
     const estimatedDurationRaw = r.estimatedDuration;
-    const estimatedDuration = typeof estimatedDurationRaw === 'number'
-      ? estimatedDurationRaw
-      : (typeof estimatedDurationRaw === 'string' ? Number(estimatedDurationRaw) || 1 : 1);
+    const estimatedDuration = asNumber(estimatedDurationRaw, 1);
     const priority = mapPriorityValue(r.priority);
     const successCriteria = Array.isArray(r.successCriteria)
       ? r.successCriteria.map((c) => asString(c, '')).filter(Boolean).join('; ')
@@ -869,8 +882,12 @@ export function normalizeResearchPlan(raw: Partial<ResearchPlan> | string | Reco
     qualityThresholds: Array.isArray((srcTyped as Record<string, unknown>).qualityThresholds) ? (srcTyped as Record<string, unknown>).qualityThresholds as QualityThreshold[] : [],
     estimatedTimeline: asString((srcTyped as Record<string, unknown>).estimatedTimeline ?? (srcTyped as Record<string, unknown>).timeline ?? 'unspecified'),
     version: asString((srcTyped as Record<string, unknown>).version, '1.0'),
-    createdAt: (srcTyped as Record<string, unknown>).createdAt ? new Date((srcTyped as Record<string, unknown>).createdAt as string) : new Date(),
-    updatedAt: (srcTyped as Record<string, unknown>).updatedAt ? new Date((srcTyped as Record<string, unknown>).updatedAt as string) : new Date(),
+    createdAt: (typeof (srcTyped as Record<string, unknown>).createdAt === 'string')
+      ? new Date((srcTyped as Record<string, unknown>).createdAt as string)
+      : ((srcTyped as Record<string, unknown>).createdAt instanceof Date ? (srcTyped as Record<string, unknown>).createdAt as Date : new Date()),
+    updatedAt: (typeof (srcTyped as Record<string, unknown>).updatedAt === 'string')
+      ? new Date((srcTyped as Record<string, unknown>).updatedAt as string)
+      : ((srcTyped as Record<string, unknown>).updatedAt instanceof Date ? (srcTyped as Record<string, unknown>).updatedAt as Date : new Date()),
   };
 
   return plan;
@@ -894,4 +911,22 @@ function parseResearchPlan(responseText: string): Record<string, unknown> {
 function isValidDataSourceType(value: string): value is DataSource['type'] {
   const allowedTypes = ['web', 'academic', 'news', 'social', 'government', 'statistical'] as const;
   return allowedTypes.includes(value as DataSource['type']);
+}
+
+// Added helper: safely get the first non-empty string-ish field from an unknown record.
+// Avoids casting to `any` and prevents 'Unexpected any' errors by using isRecord narrowing.
+function getFirstStringField(obj: unknown, ...keys: string[]): string | undefined {
+  if (!isRecord(obj)) {
+    return undefined;
+  }
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'string' && v.length > 0) {
+      return v;
+    }
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      return String(v);
+    }
+  }
+  return undefined;
 }

@@ -4,5 +4,6 @@ Rules:
 - Do not include code fences.
 - Do not include comments.
 - Ensure field names and types exactly match the schema.
-- If optional fields are omitted, do not include them with null.
-Only output the format specified. Do not include explanations, markdown fences, or commentary outside the requested structure.
+- If optional fields are omitted, do not include them with null; omit them entirely.
+- Provide deterministic `id` fields for list elements when possible.
+- If validation fails, return `{ "error": "<short message>" }` only (no additional text).
