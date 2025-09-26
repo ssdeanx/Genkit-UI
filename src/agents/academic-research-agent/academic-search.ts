@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { getJson } from 'serpapi';
 
 /**
@@ -79,12 +80,12 @@ export class AcademicSearchUtils {
 
       const searchParams = {
         query,
-        limit: options.limit ?? 10,
-        offset: options.offset ?? 0,
+        limit: String(options.limit ?? 10),
+        offset: String(options.offset ?? 0),
         fields: 'title,authors,abstract,year,venue,citationCount,influentialCitationCount,openAccessPdf'
       };
 
-      const queryString = new URLSearchParams(searchParams as any).toString();
+      const queryString = new URLSearchParams(searchParams).toString();
       const url = `https://api.semanticscholar.org/graph/v1/paper/search?${queryString}`;
 
       console.log(`Performing Semantic Scholar search for: "${query}"`);
@@ -94,7 +95,7 @@ export class AcademicSearchUtils {
         }
       });
 
-      const results = await response.json();
+      const results = await response.json() as SemanticScholarApiResponse;
       return this.parseSemanticScholarResults(results, query);
     } catch (error) {
       console.error('Semantic Scholar search failed:', error);
@@ -134,7 +135,7 @@ export class AcademicSearchUtils {
     try {
       // Search Semantic Scholar (if available)
       const semanticResults = await this.searchSemanticScholar(query, { limit: options.limit ?? 5 });
-      if (semanticResults.papers) {
+      if (semanticResults.papers.length > 0) {
         results.push(...semanticResults.papers.map(p => ({ ...p, source: 'semantic_scholar' as const })));
       }
     } catch (error) {
@@ -147,8 +148,8 @@ export class AcademicSearchUtils {
 
     // Sort by relevance/citations
     uniqueResults.sort((a, b) => {
-      const aScore = (a.citationCount ?? 0) + (a.year ? Math.max(0, 2024 - a.year) * 0.1 : 0);
-      const bScore = (b.citationCount ?? 0) + (b.year ? Math.max(0, 2024 - b.year) * 0.1 : 0);
+      const aScore = (a.citationCount ?? 0) + (typeof a.year === 'number' && Number.isFinite(a.year) && a.year > 0 ? Math.max(0, 2025 - a.year) * 0.1 : 0);
+      const bScore = (b.citationCount ?? 0) + (typeof b.year === 'number' && Number.isFinite(b.year) && b.year > 0 ? Math.max(0, 2025 - b.year) * 0.1 : 0);
       return bScore - aScore;
     });
 
@@ -169,8 +170,8 @@ export class AcademicSearchUtils {
   /**
    * Build Google Scholar search parameters
    */
-  private buildScholarParams(options: ScholarSearchOptions): Record<string, any> {
-    const params: Record<string, any> = {};
+  private buildScholarParams(options: ScholarSearchOptions): Record<string, string | number> {
+    const params: Record<string, string | number> = {};
 
     if (options.yearFrom) {
       params.as_ylo = options.yearFrom;
@@ -181,11 +182,11 @@ export class AcademicSearchUtils {
     }
 
     if (options.author) {
-      params.q += ` author:"${options.author}"`;
+      params.q = (params.q as string || '') + ` author:"${options.author}"`;
     }
 
     if (options.venue) {
-      params.q += ` source:"${options.venue}"`;
+      params.q = (params.q as string || '') + ` source:"${options.venue}"`;
     }
 
     return params;
@@ -194,17 +195,29 @@ export class AcademicSearchUtils {
   /**
    * Parse Google Scholar results
    */
-  private parseScholarResults(results: any, query: string): ScholarSearchResult {
-    const papers: ScholarPaper[] = (results.organic_results ?? []).map((paper: any) => ({
-      title: paper.title,
-      link: paper.link,
-      authors: paper.publication_info?.authors ?? [],
-      publication: paper.publication_info?.summary ?? '',
-      citedBy: paper.inline_links?.cited_by?.total ?? 0,
-      year: paper.publication_info?.year,
-      snippet: paper.snippet ?? '',
-      pdfLink: paper.resources?.[0]?.link
-    }));
+  private parseScholarResults(results: SerpApiScholarResponse, query: string): ScholarSearchResult {
+    const papers: ScholarPaper[] = (results.organic_results ?? []).map((paper: SerpApiScholarPaper) => {
+      const basePaper: Omit<ScholarPaper, 'year' | 'pdfLink'> = {
+        title: paper.title,
+        link: paper.link,
+        authors: paper.publication_info?.authors ?? [],
+        publication: paper.publication_info?.summary ?? '',
+        citedBy: paper.inline_links?.cited_by?.total ?? 0,
+        snippet: paper.snippet ?? '',
+      };
+
+      const result: Partial<ScholarPaper> = { ...basePaper };
+
+      if (paper.publication_info?.year !== undefined) {
+        result.year = paper.publication_info.year;
+      }
+
+      if (paper.resources?.[0]?.link !== undefined) {
+        result.pdfLink = paper.resources[0].link;
+      }
+
+      return result as ScholarPaper;
+    });
 
     return {
       query,
@@ -214,85 +227,100 @@ export class AcademicSearchUtils {
   }
 
   /**
-   * Parse arXiv results from XML
+   * Parse arXiv XML results into structured format
    */
   private parseArXivResults(xmlText: string, query: string): ArXivSearchResult {
-    // Simple XML parsing - in production, use a proper XML parser
     const papers: ArXivPaper[] = [];
-    const entries = xmlText.split('<entry>').slice(1);
+    const entryRegex = /<entry>(.*?)<\/entry>/gs;
+    let match;
 
-    for (const entry of entries) {
-      try {
-        const title = this.extractXmlValue(entry, 'title');
-        const authors = this.extractXmlAuthors(entry);
-        const summary = this.extractXmlValue(entry, 'summary');
-        const published = this.extractXmlValue(entry, 'published');
-        const updated = this.extractXmlValue(entry, 'updated');
-        const id = this.extractXmlValue(entry, 'id');
-        const pdfLink = this.extractXmlValue(entry, 'link', 'href', 'title="pdf"');
+    while ((match = entryRegex.exec(xmlText)) !== null) {
+      const entryXml = match[1];
+      if (!entryXml) {
+        continue;
+      } // Skip if entryXml is undefined to avoid type errors
 
-        if (title) {
-          // Handle nullish and empty cases explicitly
-          const abstract = summary !== undefined ? summary.trim() : '';
-          const arxivId = id !== undefined ? (id.split('/').pop() ?? '') : '';
-          const pdfId = id !== undefined ? id.split('/').pop() : undefined;
-          const pdfLinkValue = pdfLink ?? (pdfId ? `https://arxiv.org/pdf/${pdfId}` : undefined);
+      const title = this.extractXmlValue(entryXml, 'title') ?? '';
+      const authors = this.extractXmlAuthors(entryXml);
+      const abstract = this.extractXmlValue(entryXml, 'summary') ?? '';
+      const publishedStr = this.extractXmlValue(entryXml, 'published');
+      const updatedStr = this.extractXmlValue(entryXml, 'updated');
+      const arxivId = this.extractXmlValue(entryXml, 'id')?.split('/').pop() ?? '';
+      const categories = this.extractXmlCategories(entryXml);
 
-          // Validate dates
-          let publishedDate: Date | undefined;
-          if (published !== undefined) {
-            const date = new Date(published);
-            if (!isNaN(date.getTime())) {
-              publishedDate = date;
-            }
-          }
+      // Extract PDF link from links
+      const pdfLink = this.extractXmlValue(entryXml, 'link', 'title', 'pdf') ??
+        this.extractXmlValue(entryXml, 'link', 'rel', 'alternate')?.replace('abs', 'pdf');
 
-          let updatedDate: Date | undefined;
-          if (updated !== undefined) {
-            const date = new Date(updated);
-            if (!isNaN(date.getTime())) {
-              updatedDate = date;
-            }
-          }
+      const paper: ArXivPaper = {
+        title,
+        authors,
+        abstract,
+        arxivId,
+        categories,
+        pdfLink
+      };
 
-          papers.push({
-            title,
-            authors,
-            abstract,
-            arxivId,
-            categories: this.extractXmlCategories(entry),
-            ...(publishedDate && { published: publishedDate }),
-            ...(updatedDate && { updated: updatedDate }),
-            ...(pdfLinkValue && { pdfLink: pdfLinkValue }),
-          });
-        }
-      } catch (error) {
-        console.warn('Failed to parse arXiv entry:', error);
+      if (publishedStr) {
+        paper.published = new Date(publishedStr);
       }
+
+      if (updatedStr) {
+        paper.updated = new Date(updatedStr);
+      }
+
+      papers.push(paper);
     }
+
+    // Extract total results from XML (if available)
+    const totalResultsMatch = /<opensearch:totalResults>(\d+)<\/opensearch:totalResults>/.exec(xmlText);
+    const totalResults = totalResultsMatch?.[1] ? parseInt(totalResultsMatch[1], 10) : papers.length;
 
     return {
       query,
-      totalResults: papers.length,
+      totalResults,
       papers
     };
   }
 
   /**
-   * Parse Semantic Scholar results
+   * Parse Semantic Scholar JSON results into structured format
    */
-  private parseSemanticScholarResults(results: any, query: string): SemanticScholarResult {
-    const papers: SemanticScholarPaper[] = (results.data ?? []).map((paper: any) => ({
-      paperId: paper.paperId,
-      title: paper.title,
-      authors: paper.authors?.map((a: any) => a.name) ?? [],
-      abstract: paper.abstract ?? '',
-      year: paper.year,
-      venue: paper.venue,
-      citationCount: paper.citationCount,
-      influentialCitationCount: paper.influentialCitationCount,
-      openAccessPdf: paper.openAccessPdf
-    }));
+  private parseSemanticScholarResults(results: SemanticScholarApiResponse, query: string): SemanticScholarResult {
+    const papers: SemanticScholarPaper[] = (results.data ?? []).map((paper: ApiSemanticScholarPaper) => {
+      const result: Partial<SemanticScholarPaper> = {
+        paperId: paper.paperId ?? '',
+        title: paper.title ?? '',
+        authors: (paper.authors ?? []).map((author: { name?: string }) => author.name ?? ''),
+        abstract: paper.abstract ?? '',
+      };
+
+      if (paper.year !== undefined) {
+        result.year = paper.year;
+      }
+
+      if (paper.venue !== undefined) {
+        result.venue = paper.venue;
+      }
+
+      if (paper.citationCount !== undefined) {
+        result.citationCount = paper.citationCount;
+      }
+
+      if (paper.influentialCitationCount !== undefined) {
+        result.influentialCitationCount = paper.influentialCitationCount;
+      }
+
+      if (paper.openAccessPdf !== undefined) {
+        result.openAccessPdf = {
+          url: paper.openAccessPdf.url,
+          license: paper.openAccessPdf.license,
+          version: paper.openAccessPdf.version,
+        };
+      }
+
+      return result as SemanticScholarPaper;
+    });
 
     return {
       query,
@@ -394,7 +422,7 @@ export interface AcademicPaper {
   citationCount?: number;
   year?: number;
   snippet?: string;
-  pdfLink?: string;
+  pdfLink?: string | undefined;
 }
 
 // Source-specific paper interfaces
@@ -413,17 +441,17 @@ export interface ArXivPaper {
   title: string;
   authors: string[];
   abstract: string;
-  published?: Date;
-  updated?: Date;
+  published?: Date | undefined;
+  updated?: Date | undefined;
   arxivId: string;
-  pdfLink?: string;
+  pdfLink?: string | undefined;
   categories: string[];
 }
 
 export interface OpenAccessPdf {
-  url?: string;
-  license?: string;
-  version?: string;
+  url?: string | undefined;
+  license?: string | undefined;
+  version?: string | undefined;
 }
 
 export interface SemanticScholarPaper {
@@ -465,3 +493,56 @@ export interface ComprehensiveSearchResult {
   sourcesSearched: string[];
   errors?: string[];
 }
+
+// Add new interface for SerpAPI Google Scholar response
+interface SerpApiScholarResponse {
+  organic_results?: Array<{
+    title: string;
+    link: string;
+    publication_info?: {
+      authors?: string[];
+      summary?: string;
+      year?: number;
+    };
+    inline_links?: {
+      cited_by?: {
+        total?: number;
+      };
+    };
+    snippet?: string;
+    resources?: Array<{
+      link?: string;
+    }>;
+  }>;
+  search_information?: {
+    total_results?: number;
+  };
+}
+
+// Define a type alias for individual papers to improve reusability and type safety
+type SerpApiScholarPaper = NonNullable<SerpApiScholarResponse['organic_results']>[0];
+
+// Add interface for Semantic Scholar API response
+interface SemanticScholarApiResponse {
+  data?: Array<{
+    paperId?: string;
+    title?: string;
+    authors?: Array<{
+      name?: string;
+    }>;
+    abstract?: string;
+    year?: number;
+    venue?: string;
+    citationCount?: number;
+    influentialCitationCount?: number;
+    openAccessPdf?: {
+      url?: string;
+      license?: string;
+      version?: string;
+    };
+  }>;
+  total?: number;
+}
+
+// Define type alias for API paper to avoid 'any'
+type ApiSemanticScholarPaper = NonNullable<SemanticScholarApiResponse['data']>[0];

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import type { A2AMessage, TaskRequest, TaskResponse, AgentType } from '../shared/interfaces.js';
 
 /**
@@ -27,7 +28,7 @@ export class A2ACommunicationManager {
    */
   async sendTask(agentType: AgentType, taskRequest: TaskRequest): Promise<TaskResponse> {
     const endpoint = this.agentEndpoints.get(agentType);
-    if (!endpoint) {
+    if (endpoint === null || endpoint === undefined || endpoint.trim() === '') {
       throw new Error(`No endpoint configured for agent type: ${agentType}`);
     }
 
@@ -172,7 +173,7 @@ export class MessageRouter {
   /**
    * Route a message to the appropriate handler
    */
-  async routeMessage(message: A2AMessage): Promise<any> {
+  async routeMessage(message: A2AMessage): Promise<TaskResponse | void | boolean> {
     switch (message.type) {
       case 'task-request':
         return await this.handleTaskRequest(message);
@@ -252,12 +253,16 @@ function isTaskResponse(obj: unknown): obj is TaskResponse {
   if (typeof obj !== 'object' || obj === null) {
     return false;
   }
-  const anyObj = obj as any;
+  interface PartialTaskResponse {
+    taskId?: string;
+    status?: string | object;
+  }
+  const { taskId, status } = obj as PartialTaskResponse;
   // Basic required shape checks - adjust fields to match your TaskResponse interface
-  if (typeof anyObj.taskId !== 'string') {
+  if (typeof taskId !== 'string') {
     return false;
   }
-  if (typeof anyObj.status !== 'string' && typeof anyObj.status !== 'object') {
+  if (typeof status !== 'string' && typeof status !== 'object') {
     // allow string statuses or structured status objects depending on your interface
     return false;
   }

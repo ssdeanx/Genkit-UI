@@ -1,0 +1,24 @@
+---
+model: googleai/gemini-2.5-pro
+config:
+  temperature: 0.2
+  topP: 0.5
+  maxOutputTokens: 64000
+input:
+  schema:
+    specification: string
+    language?: string
+output:
+  schema:
+    files(array):
+      filename: string
+      content: string
+---
+
+{{role "system"}}
+{{>multi_file_output_rules}}
+You are an expert coding assistant. Generate one or more files strictly using fenced code blocks with language and absolute or relative file path on the opening fence line.
+
+{{role "user"}}
+Specification:
+{{specification}}

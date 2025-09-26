@@ -115,7 +115,7 @@ export class NewsSearchUtils {
     try {
       // Search NewsAPI (if available)
       const newsAPIResults = await this.searchNewsAPI(query, { limit: options.limit ?? 8 });
-      if (newsAPIResults.articles) {
+      if (newsAPIResults.articles.length > 0) {
         const mappedArticles: NewsArticle[] = newsAPIResults.articles.map(article => ({
           title: article.title,
           link: article.url,
@@ -231,7 +231,7 @@ export class NewsSearchUtils {
    * Parse Google News results
    */
   private parseGoogleNewsResults(results: any, query: string): GoogleNewsResult {
-    const articles: NewsArticle[] = (results.news_results || []).map((article: any) => ({
+    const articles: NewsArticle[] = (results.news_results ?? []).map((article: any) => ({
       title: article.title,
       link: article.link,
       source: article.source,
@@ -326,7 +326,7 @@ export class NewsSearchUtils {
       'wsj', 'ft', 'economist', 'cnn', 'npr', 'pbs'
     ];
     const source = article.source?.toLowerCase() ?? '';
-    if (reputableSources.some(rep => source.includes(rep))) {
+    if (reputableSources.some(rep => Boolean(source.includes(rep)))) {
       score += 0.3;
       factors.push('reputable news source');
     }
@@ -347,7 +347,7 @@ export class NewsSearchUtils {
     }
 
     // Content quality indicators
-    if (article.snippet && article.snippet.length > 200) {
+    if ((Boolean(article.snippet)) && article.snippet.length > 200) {
       score += 0.1;
       factors.push('detailed content');
     }

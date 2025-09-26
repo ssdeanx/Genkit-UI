@@ -1,11 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OrchestratorAgentExecutor } from '../index.js';
-import type { OrchestrationState, OrchestrationDecision, ResearchPlan, OrchestrationIssue } from '../../shared/interfaces.js';
+import type { OrchestrationState, OrchestrationDecision, ResearchPlan } from '../../shared/interfaces.js';
 import { TaskDelegator } from '../task-delegator.js'; // Ensure TaskDelegator is imported
 import { A2ACommunicationManager } from '../a2a-communication.js';
 import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
-import { v4 as uuidv4 } from 'uuid';
+// uuid not used in tests
 import { ai } from '../genkit.js';
+
+// Narrow helper to access private internals safely in tests
+interface OrchestratorPrivate {
+  researchStates: Map<string, OrchestrationState>;
+  cancelledTasks: Set<string>;
+}
+
+// removed TestPrivate helper (unused) — we'll call the private method via Function and cast the result
 
 // Mock dependencies
 vi.mock('../task-delegator.js');
@@ -16,8 +24,8 @@ vi.mock('genkit', () => ({
   },
 }));
 
-const mockTaskDelegator = vi.mocked(new TaskDelegator(new A2ACommunicationManager()) as any);
-const mockA2aManager = vi.mocked(new A2ACommunicationManager() as any);
+const mockTaskDelegator = vi.mocked(new TaskDelegator(new A2ACommunicationManager()) as unknown as TaskDelegator);
+const mockA2aManager = vi.mocked(new A2ACommunicationManager() as unknown as A2ACommunicationManager);
 const mockEventBus = { publish: vi.fn() } as unknown as ExecutionEventBus;
 const mockRequestContext = {
   taskId: 'task1',
@@ -42,8 +50,27 @@ describe('OrchestratorAgentExecutor', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(ai.prompt).mockResolvedValue({ text: JSON.stringify({ orchestrationDecision: { currentPhase: 'execution', nextActions: [{ action: 'delegate' }], activeTasks: [], issues: [], progressMetrics: { completedSteps: 0, totalSteps: 1, estimatedTimeRemaining: 10, overallConfidence: 0.8, qualityScore: 0.8 } } }) });
-    mockTaskDelegator.delegateResearchSteps.mockResolvedValue([{ stepId: 'test-step', agentId: 'web-research', status: 'running' }]);
+    // Mock ai.prompt to return an ExecutablePrompt-like object with a generate method
+    vi.mocked(ai.prompt).mockReturnValue(({
+      generate: vi.fn().mockResolvedValue({
+        text: JSON.stringify({
+          orchestrationDecision: {
+            currentPhase: 'execution',
+            nextActions: [{ action: 'delegate' }],
+            activeTasks: [],
+            issues: [],
+            progressMetrics: {
+              completedSteps: 0,
+              totalSteps: 1,
+              estimatedTimeRemaining: 10,
+              overallConfidence: 0.8,
+              qualityScore: 0.8
+            }
+          }
+        })
+      })
+    } as unknown) as ReturnType<typeof ai.prompt>);
+  mockTaskDelegator.delegateResearchSteps.mockResolvedValue([{ stepId: 'test-step', agentId: 'web-research', status: 'running', progressUpdates: [], retryCount: 0 }]);
     executor = new OrchestratorAgentExecutor(mockTaskDelegator, mockA2aManager);
     state = {
       researchId: 'test-id',
@@ -56,7 +83,7 @@ describe('OrchestratorAgentExecutor', () => {
       startedAt: new Date(),
       lastUpdated: new Date(),
     };
-    (executor as any).researchStates.set('test-id', state);
+    (executor as unknown as OrchestratorPrivate).researchStates.set('test-id', state);
   });
 
   describe('execute', () => {
@@ -69,7 +96,10 @@ describe('OrchestratorAgentExecutor', () => {
     });
 
     it('should handle fallback decision on parse error', async () => {
-      vi.mocked(ai.prompt).mockResolvedValueOnce({ text: 'Invalid JSON' });
+      // Mock the generate method to return invalid JSON
+      vi.mocked(ai.prompt).mockReturnValue(({
+        generate: vi.fn().mockResolvedValue({ text: 'Invalid JSON' })
+      } as unknown) as ReturnType<typeof ai.prompt>);
 
       await executor.execute(mockRequestContext, mockEventBus);
 
@@ -98,16 +128,34 @@ describe('OrchestratorAgentExecutor', () => {
     });
 
     it('should cancel task and update state', async () => {
-      (executor as any).cancelledTasks.add('test-task');
+      (executor as unknown as OrchestratorPrivate).cancelledTasks.add('test-task');
       await executor.execute(mockRequestContext, mockEventBus);
 
-      expect((executor as any).cancelledTasks.has('test-task')).toBe(true);
+      expect((executor as unknown as OrchestratorPrivate).cancelledTasks.has('test-task')).toBe(true);
       expect(mockEventBus.publish).toHaveBeenCalledWith(expect.objectContaining({ status: { state: 'canceled' } }));
       expect(state.activeSteps.every(s => s.status !== 'running')).toBe(true);
     });
 
     it('should loop up to max cycles and complete', async () => {
-      vi.mocked(ai.prompt).mockResolvedValue({ text: JSON.stringify({ orchestrationDecision: { nextActions: [{ action: 'continue' }], activeTasks: [], issues: [], progressMetrics: { completedSteps: 0, totalSteps: 1, estimatedTimeRemaining: 10, overallConfidence: 0.8, qualityScore: 0.8 } } }) } });
+      // Mock ai.prompt to return an object with generate that resolves to the continue action
+      vi.mocked(ai.prompt).mockReturnValue(({
+        generate: vi.fn().mockResolvedValue({
+          text: JSON.stringify({
+            orchestrationDecision: {
+              nextActions: [{ action: 'continue' }],
+              activeTasks: [],
+              issues: [],
+              progressMetrics: {
+                completedSteps: 0,
+                totalSteps: 1,
+                estimatedTimeRemaining: 10,
+                overallConfidence: 0.8,
+                qualityScore: 0.8
+              }
+            }
+          })
+        })
+      } as unknown) as ReturnType<typeof ai.prompt>);
 
       await executor.execute(mockRequestContext, mockEventBus);
 
@@ -119,16 +167,16 @@ describe('OrchestratorAgentExecutor', () => {
 
   describe('parseOrchestrationDecision', () => {
     it('should parse valid JSON', () => {
-      const executor = new OrchestratorAgentExecutor(mockTaskDelegator, mockA2aManager);
+      const localExecutor = new OrchestratorAgentExecutor(mockTaskDelegator, mockA2aManager);
       const text = JSON.stringify({ orchestrationDecision: { currentPhase: 'test' } });
-      const result = (executor as any).parseOrchestrationDecision(text);
+  const result = ((localExecutor as unknown as Record<string, unknown>)['parseOrchestrationDecision'] as Function).call(localExecutor, text) as OrchestrationDecision;
 
       expect(result.currentPhase).toBe('test');
     });
 
     it('should use fallback on invalid JSON', () => {
-      const executor = new OrchestratorAgentExecutor(mockTaskDelegator, mockA2aManager);
-      const result = (executor as any)['parseOrchestrationDecision']('invalid');
+    const localExecutor2 = new OrchestratorAgentExecutor(mockTaskDelegator, mockA2aManager);
+  const result = ((localExecutor2 as unknown as Record<string, unknown>)['parseOrchestrationDecision'] as Function).call(localExecutor2, 'invalid') as OrchestrationDecision;
 
       expect(result.currentPhase).toBe('execution');
       expect(result.nextActions).toHaveLength(1);
@@ -139,7 +187,7 @@ describe('OrchestratorAgentExecutor', () => {
     it('should mark task as cancelled and publish event', async () => {
       await executor.cancelTask('test-task', mockEventBus);
 
-      expect((executor as any).cancelledTasks.has('test-task')).toBe(true);
+    expect((executor as unknown as OrchestratorPrivate).cancelledTasks.has('test-task')).toBe(true);
       expect(mockEventBus.publish).toHaveBeenCalledWith(expect.objectContaining({ status: { state: 'canceled' } }));
     });
   });

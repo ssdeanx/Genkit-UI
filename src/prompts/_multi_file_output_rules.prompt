@@ -1,0 +1,16 @@
+Output MUST be valid JSON matching the declared output schema `files(array)`.
+
+Rules for `files` entries:
+- Each entry must include `filename` (string) and `content` (string).
+- The `content` field must contain the exact source file text as a string (do NOT include markdown fences inside `content`).
+- File paths should be relative where appropriate (e.g., `src/index.ts`).
+- If the model produces code samples, place them into the `content` field verbatim.
+
+Example output:
+{
+  "files": [
+    { "filename": "src/index.ts", "content": "// Top of file\nconsole.log(\"hello\");\n" }
+  ]
+}
+
+If the model cannot produce the requested files, return `{ "files": [] }` or `{ "error": "<short message>" }`.

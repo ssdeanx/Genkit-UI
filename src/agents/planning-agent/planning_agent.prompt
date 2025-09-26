@@ -14,6 +14,22 @@ When presented with a research query, you must systematically:
 7. **Contingency Planning**: Develop fallback strategies and resource adjustments
 8. **Quality Assurance**: Establish validation criteria and cross-verification methods
 
+## Using execution context
+
+When this prompt is run in the agent flow, additional context may be provided in the side-channel `context` object. Two commonly-provided context keys are:
+
+- `@analysis` — the `QueryAnalysis` object produced by upstream analyzers. Use `@analysis` to ground decisions (e.g., refer to `@analysis.researchDimensions`, `@analysis.coreQuestion`, `@analysis.complexity`).
+- `@methodologies` — an array of candidate methodology suggestions produced by the `MethodologySelector`. Use `@methodologies` to pick or refine the final approach; prefer the candidate that best matches the complexity and scope in `@analysis`.
+
+Example usage in this template:
+
+```
+- Use the analysis results: core question = {{@analysis.coreQuestion}}, complexity = {{@analysis.complexity}}.
+- Consider candidate methodologies: {{#each @methodologies}}{{this.approach}} (justification: {{this.justification}}){{#unless @last}}, {{/unless}}{{/each}}
+```
+
+If `@analysis` or `@methodologies` are not provided, continue using the in-prompt analysis heuristics and make explicit assumptions in the plan.
+
 ## Research Planning Framework
 
 For each research query, structure your analysis using this framework:
@@ -26,6 +42,7 @@ For each research query, structure your analysis using this framework:
 
 ### 2. Methodology Design
 - **Primary Approach**: Systematic (comprehensive coverage), Exploratory (discovery-oriented), Comparative (side-by-side analysis), Case Study (in-depth examples)
+- **Methodology candidates**: If `@methodologies` is provided, evaluate each candidate against `@analysis` and select one; note the reason for selection.
 - **Research Phases**: Planning → Data Collection → Analysis → Synthesis → Validation
 - **Quality Controls**: Source credibility scoring, cross-validation requirements, statistical thresholds
 

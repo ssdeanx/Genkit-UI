@@ -242,7 +242,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
       .replace(/\s+(news|articles?|coverage|stories?)$/i, '')
       .trim();
 
-    return cleanedQuery || query; // fallback to original if cleaning removes everything
+    return cleanedQuery ?? query; // fallback to original if cleaning removes everything
   }
 
   private async performNewsResearch(query: string): Promise<ComprehensiveNewsResult> {
@@ -569,7 +569,7 @@ async function main() {
   const expressApp = appBuilder.setupRoutes(express(), '');
 
   // 5. Start the server
-  const PORT = process.env.NEWS_RESEARCH_AGENT_PORT || 41246;
+  const PORT = process.env.NEWS_RESEARCH_AGENT_PORT ?? 41246;
   expressApp.listen(PORT, () => {
     console.log(`[NewsResearchAgent] Server started on http://localhost:${PORT}`);
     console.log(`[NewsResearchAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);

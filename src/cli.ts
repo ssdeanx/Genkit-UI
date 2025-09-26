@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
 
 import readline from "node:readline";
 import crypto from "node:crypto";
@@ -69,7 +70,7 @@ function printAgentEvent(
 
   // Check if it's a TaskStatusUpdateEvent
   if (event.kind === "status-update") {
-    const update = event as TaskStatusUpdateEvent; // Cast for type safety
+    const update = event; // Cast for type safety
     const {state} = update.status;
     let stateEmoji = "❓";
     let stateColor: keyof typeof colors = "yellow";
@@ -95,6 +96,10 @@ function printAgentEvent(
         stateEmoji = "❌";
         stateColor = "red";
         break;
+      case "submitted": { throw new Error('Not implemented yet: "submitted" case') }
+      case "rejected": { throw new Error('Not implemented yet: "rejected" case') }
+      case "auth-required": { throw new Error('Not implemented yet: "auth-required" case') }
+      case "unknown": { throw new Error('Not implemented yet: "unknown" case') }
       default:
         stateEmoji = "ℹ️"; // For other states like submitted, rejected etc.
         stateColor = "dim";
@@ -111,9 +116,9 @@ function printAgentEvent(
   }
   // Check if it's a TaskArtifactUpdateEvent
   else if (event.kind === "artifact-update") {
-    const update = event as TaskArtifactUpdateEvent; // Cast for type safety
+    const update = event; // Cast for type safety
     console.log(
-      `${prefix} 📄 Artifact Received: ${update.artifact.name || "(unnamed)"
+      `${prefix} 📄 Artifact Received: ${update.artifact.name ?? "(unnamed)"
       } (ID: ${update.artifact.artifactId}, Task: ${update.taskId}, Context: ${update.contextId})`
     );
     // Create a temporary message-like structure to reuse printMessageContent
@@ -141,14 +146,14 @@ function printMessageContent(message: Message) {
     if (part.kind === "text") { // Check kind property
       console.log(`${partPrefix} ${colorize("green", "📝 Text:")}`, part.text);
     } else if (part.kind === "file") { // Check kind property
-      const filePart = part as FilePart;
+      const filePart = part;
       console.log(
-        `${partPrefix} ${colorize("blue", "📄 File:")} Name: ${filePart.file.name || "N/A"
-        }, Type: ${filePart.file.mimeType || "N/A"}, Source: ${("bytes" in filePart.file) ? "Inline (bytes)" : filePart.file.uri
+        `${partPrefix} ${colorize("blue", "📄 File:")} Name: ${filePart.file.name ?? "N/A"
+        }, Type: ${filePart.file.mimeType ?? "N/A"}, Source: ${("bytes" in filePart.file) ? "Inline (bytes)" : filePart.file.uri
         }`
       );
     } else if (part.kind === "data") { // Check kind property
-      const dataPart = part as DataPart;
+      const dataPart = part;
       console.log(
         `${partPrefix} ${colorize("yellow", "📊 Data:")}`,
         JSON.stringify(dataPart.data, null, 2)
@@ -235,7 +240,7 @@ async function main() {
     const messageId = generateId(); // Generate a unique message ID
 
     const messagePayload: Message = {
-      messageId: messageId,
+      messageId,
       kind: "message", // Required by Message interface
       role: "user",
       parts: [
@@ -276,11 +281,11 @@ async function main() {
         const prefix = colorize("magenta", `\n${agentName} [${timestamp}]:`);
 
         if (event.kind === "status-update" || event.kind === "artifact-update") {
-          const typedEvent = event as TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
+          const typedEvent = event;
           printAgentEvent(typedEvent);
 
           // If the event is a TaskStatusUpdateEvent and it's final, reset currentTaskId
-          if (typedEvent.kind === "status-update" && (typedEvent as TaskStatusUpdateEvent).final && (typedEvent as TaskStatusUpdateEvent).status.state !== "input-required") {
+          if (typedEvent.kind === "status-update" && (typedEvent).final && (typedEvent).status.state !== "input-required") {
             console.log(colorize("yellow", `   Task ${typedEvent.taskId} is final. Clearing current task ID.`));
             currentTaskId = undefined;
             // Optionally, you might want to clear currentContextId as well if a task ending implies context ending.
@@ -289,7 +294,7 @@ async function main() {
           }
 
         } else if (event.kind === "message") {
-          const msg = event as Message;
+          const msg = event;
           console.log(`${prefix} ${colorize("green", "✉️ Message Stream Event:")}`);
           printMessageContent(msg);
           if (msg.taskId && msg.taskId !== currentTaskId) {
@@ -301,14 +306,14 @@ async function main() {
             currentContextId = msg.contextId;
           }
         } else if (event.kind === "task") {
-          const task = event as Task;
+          const task = event;
           console.log(`${prefix} ${colorize("blue", "ℹ️ Task Stream Event:")} ID: ${task.id}, Context: ${task.contextId}, Status: ${task.status.state}`);
           if (task.id !== currentTaskId) {
-            console.log(colorize("dim", `   Task ID updated from ${currentTaskId || 'N/A'} to ${task.id}`));
+            console.log(colorize("dim", `   Task ID updated from ${currentTaskId ?? 'N/A'} to ${task.id}`));
             currentTaskId = task.id;
           }
           if (task.contextId && task.contextId !== currentContextId) {
-            console.log(colorize("dim", `   Context ID updated from ${currentContextId || 'N/A'} to ${task.contextId}`));
+            console.log(colorize("dim", `   Context ID updated from ${currentContextId ?? 'N/A'} to ${task.contextId}`));
             currentContextId = task.contextId;
           }
           if (task.status.message) {
