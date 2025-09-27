@@ -1,3 +1,17 @@
+---
+name: "Genkit Multi-Agent System Code Exemplars"
+description: "High-quality code examples demonstrating best practices in our TypeScript/Genkit multi-agent AI system."
+version: "1.0"
+created: "2025-09-25"
+updated: "2025-09-25"
+tags:
+  - "typescript"
+  - "genkit"
+  - "a2a"
+  - "google-genai"
+  - "nodejs"
+---
+
 # Code Exemplars for Genkit Multi-Agent System
 
 ## Introduction

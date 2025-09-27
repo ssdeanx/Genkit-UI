@@ -66,8 +66,8 @@ ai.defineResource(
 
 // Use createMcpServer
 const server = createMcpServer(ai, {
-  name: 'example_server',
-  version: '0.0.1',
+  name: 'Genkit-cards',
+  version: '0.0.2',
 });
 // Setup (async) then starts with stdio transport by default
 server.setup().then(async () => {

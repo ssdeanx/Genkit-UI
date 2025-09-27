@@ -1,5 +1,15 @@
 ---
-applyTo: ["*"]
+applyTo: ["**"]
+description: "Genkit Multi-Agent System Architecture Blueprint"
+version: "1.0"
+created: "2025-09-25"
+updated: "2025-09-25"
+tags:
+  - "typescript"
+  - "genkit"
+  - "a2a"
+  - "google-genai"
+  - "nodejs"
 ---
 # Genkit Multi-Agent System Architecture Blueprint
 

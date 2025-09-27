@@ -11,6 +11,11 @@ import {
   planningFlow,
   coderStreamingFlow,
   orchestratorStreamingFlow,
+  webResearchFlow,
+  newsResearchFlow,
+  academicResearchFlow,
+  dataAnalysisFlow,
+  contentEditorFlow,
 } from './index.js';
 
 const PORT = Number(process.env.FLOW_PORT ?? process.env.PORT ?? 3400);
@@ -23,6 +28,11 @@ const flows = [
   planningFlow,
   coderStreamingFlow,
   orchestratorStreamingFlow,
+  webResearchFlow,
+  newsResearchFlow,
+  academicResearchFlow,
+  dataAnalysisFlow,
+  contentEditorFlow,
 ];
 
 async function main() {

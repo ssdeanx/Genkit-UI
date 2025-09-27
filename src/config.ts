@@ -1,13 +1,13 @@
 import { devLocalVectorstore } from '@genkit-ai/dev-local-vectorstore';
 import { googleAI } from '@genkit-ai/google-genai';
 import { genkit } from 'genkit';
+import { Readable } from 'stream';
 
 // Initialize Genkit with the Google AI plugin
 export const ai = genkit({
   // Ensure Dotprompt prompts in `src/prompts` are discovered at runtime
   promptDir: './src/prompts',
   plugins: [
-    googleAI(),
     googleAI({ experimental_debugTraces: true }),
     devLocalVectorstore([
       {
@@ -41,6 +41,9 @@ export const ai = genkit({
     // This is a comment
     entityExtractionConfig: { enabled: true, modelVersion: 'ENTITY_EXTRACTION_MODEL_VERSION_V1' },
     // Another comment
+    config: {
+      tools: [{ googleSearch: {} }],
+    },
   }),
 });
 
