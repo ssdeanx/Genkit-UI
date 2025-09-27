@@ -1,6 +1,6 @@
 {
   "name": "genkit-ui",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "",
   "main": "index.js",
   "type": "module",
@@ -25,6 +25,7 @@
   "license": "ISC",
   "scripts": {
     "test": "vitest",
+    "coverage": "vitest run --coverage",
     "genkit:ui": "dotenvx run -- genkit start -- npx tsx --watch src/index.ts",
     "flow:serve": "dotenvx run -- npx tsx src/flowServer.ts",
     "flow:serve:dev": "dotenvx run -- npx tsx --watch src/flowServer.ts",
@@ -80,6 +81,7 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
     "@dotenvx/dotenvx": "^1.51.0",
     "@genkit-ai/google-genai": "^1.20.0",
     "@genkit-ai/googleai": "^1.20.0",

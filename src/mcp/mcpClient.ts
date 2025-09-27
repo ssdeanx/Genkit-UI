@@ -34,3 +34,6 @@ const ai = genkit({
 
   await mcpHost.close();
 })();
+
+// Note: In a real application, you would want to handle errors and cleanup more robustly.
+export { mcpHost };

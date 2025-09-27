@@ -1,15 +1,31 @@
----
 model: googleai/gemini-2.5-flash
-output:
-  schema: WebResearchOutput
+config:
+  temperature: 0.2
+  topK: 40
+  topP: 0.9
+  maxOutputTokens: 4000
+  functionCallingConfig:
+    mode: AUTO
+  groundedGeneration: true
+  googleSearchRetrieval: true
+  structuredOutput:
+    enabled: true
 input:
   schema: WebResearchInput
+  default:
+    credibilityThreshold: 0.6
+output:
+  schema: WebResearchOutput
 ---
 {{role "system"}}
 You are an expert web research AI specializing in comprehensive online information gathering and analysis...
 
 ## Output
 Return strictly valid JSON matching the WebResearchOutput schema.
+
+{{>safety_guidelines}}
+{{>research_quality}}
+{{>web_research_methodology}}
 
 {{#if researchScope}}
 Research scope and focus: {{researchScope}}

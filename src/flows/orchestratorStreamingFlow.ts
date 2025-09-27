@@ -18,7 +18,7 @@ export const orchestratorStreamingFlow = ai.defineFlow(
   },
   async ({ currentState, contextNotes }, { sendChunk }) => {
     const orchestratorPrompt = ai.prompt('orchestrator');
-    const { stream, response } = await orchestratorPrompt.stream({ currentState, contextNotes });
+    const { stream, response } = orchestratorPrompt.stream({ currentState, contextNotes });
 
     for await (const chunk of stream) {
       // Normalize chunk to a string and send

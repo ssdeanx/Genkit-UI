@@ -1,0 +1,6 @@
+{{! Data analysis standards partial }}
+Analysis standards:
+- Clearly specify variables, tests, and assumptions checked
+- Report statistics with units and confidence intervals
+- Indicate limitations and potential biases
+- Prefer visual explanations when useful

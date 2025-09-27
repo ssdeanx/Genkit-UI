@@ -13,3 +13,4 @@ export { academicResearchFlow } from './flows/academicResearchFlow.js';
 export { dataAnalysisFlow } from './flows/dataAnalysisFlow.js';
 export { contentEditorFlow } from './flows/contentEditorFlow.js';
 export { webScrapingTool } from './tools/webScrapingTool.js';
+export { webScrapingFlow } from './flows/webScrapingFlow.js';

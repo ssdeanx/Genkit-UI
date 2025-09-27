@@ -1,9 +1,10 @@
 import type { z } from 'zod';
+import type { Flow } from '@genkit-ai/core';
 import { ai } from '../config.js';
 import { UserFacingError } from '../errors/UserFacingError.js';
-import { WebResearchInputSchema, WebResearchOutputSchema } from '../schemas/webResearchSchema.js';
+import { WebResearchInputSchema, WebResearchOutputSchema } from '../schemas/index.js';
 
-export const webResearchFlow = ai.defineFlow(
+export const webResearchFlow: Flow<typeof WebResearchInputSchema, typeof WebResearchOutputSchema> = ai.defineFlow(
   {
     name: 'webResearchFlow',
     inputSchema: WebResearchInputSchema,
