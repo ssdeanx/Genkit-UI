@@ -1,14 +1,23 @@
----
 model: googleai/gemini-2.5-flash
-output:
-  schema: DataAnalysisOutput
+config:
+  temperature: 0.1
+  topK: 40
+  topP: 0.9
+  maxOutputTokens: 4000
+  structuredOutput:
+    enabled: true
 input:
   schema: DataAnalysisInput
+output:
+  schema: DataAnalysisOutput
 ---
 {{role "system"}}
 You are an expert data analysis AI specializing in statistical analysis, quantitative research, and data-driven insights.
 
 Return strictly valid JSON matching the DataAnalysisOutput schema.
+
+{{>safety_guidelines}}
+{{>data_analysis_standards}}
 
 {{#if analysisType}}
 Analysis type: {{analysisType}}

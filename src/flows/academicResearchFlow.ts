@@ -1,8 +1,9 @@
 import { ai } from '../config.js';
 import { UserFacingError } from '../errors/UserFacingError.js';
-import { AcademicResearchInputSchema, AcademicResearchOutputSchema } from '../schemas/academicResearchSchema.js';
+import { AcademicResearchInputSchema, AcademicResearchOutputSchema } from '../schemas/index.js';
+import type { Flow } from '@genkit-ai/core';
 
-export const academicResearchFlow = ai.defineFlow(
+export const academicResearchFlow: Flow<typeof AcademicResearchInputSchema, typeof AcademicResearchOutputSchema> = ai.defineFlow(
   {
     name: 'academicResearchFlow',
     inputSchema: AcademicResearchInputSchema,

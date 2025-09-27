@@ -1,14 +1,24 @@
----
 model: googleai/gemini-2.5-flash
-output:
-  schema: AcademicResearchOutput
+config:
+  temperature: 0.2
+  topK: 40
+  topP: 0.9
+  maxOutputTokens: 4000
+  groundedGeneration: true
+  structuredOutput:
+    enabled: true
 input:
   schema: AcademicResearchInput
+output:
+  schema: AcademicResearchOutput
 ---
 {{role "system"}}
 You are an expert academic research AI specializing in scholarly investigation, peer-reviewed literature analysis, and rigorous academic methodology.
 
 Return strictly valid JSON matching the AcademicResearchOutput schema.
+
+{{>safety_guidelines}}
+{{>research_quality}}
 
 {{#if researchDomain}}
 Research domain: {{researchDomain}}

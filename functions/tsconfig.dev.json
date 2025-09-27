@@ -1,5 +1,11 @@
 {
   "include": [
-    ".eslintrc.js"
-  ]
+    ".eslintrc.js",
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "compilerOptions": {
+    "strict": true,
+    "forceConsistentCasingInFileNames": true
+  }
 }

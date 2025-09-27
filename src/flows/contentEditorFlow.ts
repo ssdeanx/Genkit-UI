@@ -1,8 +1,9 @@
+import type { Flow } from '@genkit-ai/core';
 import { ai } from '../config.js';
 import { UserFacingError } from '../errors/UserFacingError.js';
-import { ContentEditorInputSchema, ContentEditorOutputSchema } from '../schemas/contentEditorSchema.js';
+import { ContentEditorInputSchema, ContentEditorOutputSchema } from '../schemas/index.js';
 
-export const contentEditorFlow = ai.defineFlow(
+export const contentEditorFlow: Flow<typeof ContentEditorInputSchema, typeof ContentEditorOutputSchema> = ai.defineFlow(
   {
     name: 'contentEditorFlow',
     inputSchema: ContentEditorInputSchema,

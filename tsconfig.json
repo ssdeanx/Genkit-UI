@@ -32,11 +32,20 @@
     "functions/**/*.ts",
     "apphosting.yaml",
     "firebase.json",
-    "main/**/*.ts"
+    "main/**/*.ts",
+    "tests/**/*.ts",
+    "src/**/*__tests__/*.ts",
+    "vitest.setup.ts",
+    "functions/.eslintrc.js"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    ".github"
+    ".github",
+    "lib",
+    "scripts",
+    "templates",
+    "/functions/node_modules",
+    "/functions/lib"
   ]
 }

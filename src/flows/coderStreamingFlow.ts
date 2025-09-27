@@ -13,7 +13,7 @@ export const coderStreamingFlow = ai.defineFlow(
     const coderPrompt = ai.prompt('coder_multi_file_codegen');
 
     // Start streaming run of the prompt
-    const { stream, response } = await coderPrompt.stream({ specification, language });
+    const { stream, response } = coderPrompt.stream({ specification, language });
 
     for await (const chunk of stream) {
       // Each chunk may be a string or an object with `text` property.

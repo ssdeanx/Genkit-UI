@@ -1,14 +1,27 @@
----
 model: googleai/gemini-2.5-flash
-output:
-  schema: NewsResearchOutput
+config:
+  temperature: 0.2
+  topK: 40
+  topP: 0.9
+  maxOutputTokens: 4000
+  groundedGeneration: true
+  structuredOutput:
+    enabled: true
 input:
   schema: NewsResearchInput
+  default:
+    urgencyLevel: medium
+output:
+  schema: NewsResearchOutput
 ---
 {{role "system"}}
 You are an expert news research AI specializing in current events analysis, media credibility assessment, and breaking news investigation.
 
 Return strictly valid JSON matching the NewsResearchOutput schema.
+
+{{>safety_guidelines}}
+{{>news_criteria}}
+{{>research_quality}}
 
 {{#if newsScope}}
 News scope and focus: {{newsScope}}

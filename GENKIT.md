@@ -451,7 +451,7 @@ js/interrupts.md
 js/local-observability.md
 js/models.md
  js/rag.md
- js/tool-calling.md
+js/tool-calling.md
  js/plugin-authoring/evaluators.md
  js/observability/advanced-configuration.md
  js/observability/authentication.md

@@ -40,8 +40,12 @@ function log(level: 'log' | 'warn' | 'error', message: string, ...args: unknown[
 /* eslint-enable no-console */
 
 if (process.env.GEMINI_API_KEY === undefined || process.env.GEMINI_API_KEY === '') {
-  log('error', "GEMINI_API_KEY environment variable not set.");
-  process.exit(1);
+  if (process.env.NODE_ENV !== 'test') {
+    log('error', "GEMINI_API_KEY environment variable not set.");
+    process.exit(1);
+  } else {
+    log('warn', 'GEMINI_API_KEY not set; continuing in test environment.');
+  }
 }
 
 // Load the Genkit prompt
@@ -633,8 +637,10 @@ async function main() {
   });
 }
 
-main().catch((error) => {
-  log('error', 'Failed to start server:', error);
-});
+if (process.env.NODE_ENV !== 'test') {
+  main().catch((error) => {
+    log('error', 'Failed to start server:', error);
+  });
+}
 
 export { OrchestratorAgentExecutor };

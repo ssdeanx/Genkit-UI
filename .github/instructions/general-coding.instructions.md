@@ -2,11 +2,11 @@
 applyTo: ["**/*.ts", "**/*.tsx"]
 description: "General coding standards for TypeScript and React code."
 tags: ["typescript", "react", "coding-standards"]
-version: "1.0.0"
+version: "1.0.1"
 last_updated: "2025-09-24T19:13:49Z"
 status: "stable"
 ---
-# Project OverviewCoding Standards for TypeScript and React
+# Coding Standards for TypeScript and React
 
 ## Introduction
 Apply the general coding guidelines to all code.
@@ -22,16 +22,6 @@ Apply the general coding guidelines to all code.
 - Use async/await for asynchronous code
 - Handle errors with try/catch blocks or Promise.catch
 - Use ESLint and Prettier for code formatting and linting
-
-## React Guidelines if using React
-- Use functional components with hooks
-- Follow the React hooks rules (no conditional hooks)
-- Use React.FC type for components with children
-- Keep components small and focused
-- Use CSS modules for component styling
-- Use prop-types for runtime type checking of props
-- Use React context for global state management
-- Use React Router for navigation and routing
 
 ## General Best Practices
 - Write clear, descriptive comments and JSDoc for functions and classes
