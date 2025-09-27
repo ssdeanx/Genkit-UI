@@ -409,6 +409,7 @@ exhaustive list.
 | Plugin                             | Recommended Model                  |
 |------------------------------------|------------------------------------|
 | @genkit-ai/google-genai            | gemini-2.5-flash                   |
+| @genkit-ai/google-genai            | gemini-2.5-flash-lite              |
 | @genkit-ai/compat-oai/openai       | gpt-4o-mini                        |
 | @genkit-ai/compat-oai/deepseek     | deepseek-chat                      |
 | @genkit-ai/compat-oai/xai          | grok-3-mini                        |

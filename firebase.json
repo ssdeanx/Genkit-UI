@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
   "apphosting": {
     "backendId": "genkit-backend",
     "rootDir": "/",
@@ -7,7 +11,7 @@
       ".git",
       "firebase-debug.log",
       "firebase-debug.*.log",
-      "functions"
+      "main"
     ]
   }
 }

@@ -1,10 +1,15 @@
 ---
-applyTo: ["*"]
+applyTo: ["./src/**/*.ts", "../src/**/*.tsx", "../functions/**/*.ts", "**"]
 description: "Instructions for GitHub Copilot to follow when generating code for this repository."
 version: "1.0"
 created: "2025-09-25"
 updated: "2025-09-25"
-tags: ["typescript", "genkit", "a2a", "google-genai", "nodejs"]
+tags:
+  - "typescript"
+  - "genkit"
+  - "a2a"
+  - "google-genai"
+  - "nodejs"
 ---
 
 # GitHub Copilot Instructions

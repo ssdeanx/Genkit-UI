@@ -1,0 +1,79 @@
+sources:
+  my-firestore-source:
+    kind: "firestore"
+    project: "my-project-id"
+    # database: "my-database"  # Optional, defaults to "(default)"authServices:
+
+authServices:
+  my-google-auth:
+    kind: google
+    clientId: ${YOUR_GOOGLE_CLIENT_ID}
+
+tools:
+  query_collection:
+    kind: firestore-query-collection
+    source: my-firestore
+    description: Query Firestore collections with advanced filtering
+  add-company-doc:
+    kind: firestore-add-documents
+    source: my-firestore
+    description: Add a new company document
+  secure-add-docs:
+    kind: firestore-add-documents
+    source: prod-firestore
+    description: Add documents with authentication required
+    authRequired:
+      - google-oauth
+      - api-key
+  get_user_documents:
+    kind: firestore-get-documents
+    source: my-firestore-source
+    description: Use this tool to retrieve multiple documents from Firestore.
+  delete_user_documents:
+    kind: firestore-delete-documents
+    source: my-firestore-source
+    description: Use this tool to delete multiple documents from Firestore.
+  get_firestore_rules:
+    kind: firestore-get-rules
+    source: my-firestore-source
+    description: Use this tool to retrieve the active Firestore security rules.
+  list_firestore_collections:
+    kind: firestore-list-collections
+    source: my-firestore-source
+    description: Use this tool to list collections in Firestore.
+  query_countries:
+    kind: firestore-query
+    source: my-firestore-source
+    description: Query countries with dynamic filters
+    collectionPath: "countries"
+    filters: |
+      {
+        "field": "continent",
+        "op": "==",
+        "value": {"stringValue": "{{.continent}}"}
+      }
+    parameters:
+      - name: continent
+        type: string
+        description: Continent to filter by
+        required: true
+  update-user-doc:
+    kind: firestore-update-document
+    source: my-firestore
+    description: Update a user document
+  secure-update-doc:
+    kind: firestore-update-document
+    source: prod-firestore
+    description: Update documents with authentication required
+    authRequired:
+      - google-oauth
+      - api-key
+  firestore-validate-rules:
+    kind: firestore-validate-rules
+    source: <firestore-source-name>
+    description: "Checks the provided Firestore Rules source for syntax and validation errors"
+  wait_for_tool:
+    kind: wait
+    description: Use this tool to pause execution for a specified duration.
+    timeout: 30s
+

@@ -49,7 +49,7 @@ function generateId(): string { // Renamed for more general use
 // --- State ---
 let currentTaskId: string | undefined = undefined; // Initialize as undefined
 let currentContextId: string | undefined = undefined; // Initialize as undefined
-const serverUrl = process.argv[2] || "http://localhost:41241"; // Agent's base URL
+const serverUrl = process.argv[2] ?? "http://localhost:41241"; // Agent's base URL
 const client = new A2AClient(serverUrl);
 let agentName = "Agent"; // Default, try to get from agent card later
 
@@ -181,7 +181,7 @@ async function fetchAndDisplayAgentCard() {
       console.log(`  Description: ${card.description}`);
     }
     console.log(`  Version:     ${card.version || "N/A"}`);
-    if (card.capabilities?.streaming) {
+    if (card.capabilities?.streaming === true) {
       console.log(`  Streaming:   ${colorize("green", "Supported")}`);
     } else {
       console.log(`  Streaming:   ${colorize("yellow", "Not Supported (or not specified)")}`);
@@ -189,7 +189,7 @@ async function fetchAndDisplayAgentCard() {
     // Update prompt prefix to use the fetched name
     // The prompt is set dynamically before each rl.prompt() call in the main loop
     // to reflect the current agentName if it changes (though unlikely after initial fetch).
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.log(
       colorize("yellow", `⚠️ Error fetching or parsing agent card`)
     );
@@ -216,8 +216,11 @@ async function main() {
     const input = line.trim();
     rl.setPrompt(colorize("cyan", `${agentName} > You: `)); // Ensure prompt reflects current agentName
 
+    let shouldPrompt = true; // Flag to control prompting in finally
+
     if (!input) {
       rl.prompt();
+      shouldPrompt = false; // Prevent duplicate prompting in finally
       return;
     }
 
@@ -227,11 +230,12 @@ async function main() {
       console.log(
         colorize("bright", `✨ Starting new session. Task and Context IDs are cleared.`)
       );
-      rl.prompt();
+      // Removed rl.prompt() to avoid duplication; handled in finally
       return;
     }
 
     if (input.toLowerCase() === "/exit") {
+      shouldPrompt = false; // Skip prompting after closing
       rl.close();
       return;
     }
@@ -252,11 +256,11 @@ async function main() {
     };
 
     // Conditionally add taskId to the message payload
-    if (currentTaskId) {
+    if (currentTaskId !== undefined) {
       messagePayload.taskId = currentTaskId;
     }
     // Conditionally add contextId to the message payload
-    if (currentContextId) {
+    if (currentContextId !== undefined) {
       messagePayload.contextId = currentContextId;
     }
 
@@ -289,7 +293,7 @@ async function main() {
             console.log(colorize("yellow", `   Task ${typedEvent.taskId} is final. Clearing current task ID.`));
             currentTaskId = undefined;
             // Optionally, you might want to clear currentContextId as well if a task ending implies context ending.
-            // currentContextId = undefined; 
+            // currentContextId = undefined;
             // console.log(colorize("dim", `   Context ID also cleared as task is final.`));
           }
 
@@ -297,11 +301,11 @@ async function main() {
           const msg = event;
           console.log(`${prefix} ${colorize("green", "✉️ Message Stream Event:")}`);
           printMessageContent(msg);
-          if (msg.taskId && msg.taskId !== currentTaskId) {
+          if (msg.taskId !== undefined && msg.taskId !== currentTaskId) {
             console.log(colorize("dim", `   Task ID context updated to ${msg.taskId} based on message event.`));
             currentTaskId = msg.taskId;
           }
-          if (msg.contextId && msg.contextId !== currentContextId) {
+          if (msg.contextId !== undefined && msg.contextId !== currentContextId) {
             console.log(colorize("dim", `   Context ID updated to ${msg.contextId} based on message event.`));
             currentContextId = msg.contextId;
           }
@@ -312,7 +316,7 @@ async function main() {
             console.log(colorize("dim", `   Task ID updated from ${currentTaskId ?? 'N/A'} to ${task.id}`));
             currentTaskId = task.id;
           }
-          if (task.contextId && task.contextId !== currentContextId) {
+          if (task.contextId !== undefined && task.contextId !== currentContextId) {
             console.log(colorize("dim", `   Context ID updated from ${currentContextId ?? 'N/A'} to ${task.contextId}`));
             currentContextId = task.contextId;
           }
@@ -328,27 +332,30 @@ async function main() {
         }
       }
       console.log(colorize("dim", `--- End of response stream for this input ---`));
-    } catch (error: any) {
+    } catch (error: unknown) {
       const timestamp = new Date().toLocaleTimeString();
       const prefix = colorize("red", `\n${agentName} [${timestamp}] ERROR:`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(
         prefix,
         `Error communicating with agent:`,
-        error.message || error
+        errorMessage
       );
-      if (error.code) {
+      if (typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string') {
         console.error(colorize("gray", `   Code: ${error.code}`));
       }
-      if (error.data) {
+      if (typeof error === 'object' && error !== null && 'data' in error) {
         console.error(
           colorize("gray", `   Data: ${JSON.stringify(error.data)}`)
         );
       }
-      if (!(error.code || error.data) && error.stack) {
+      if (!(typeof error === 'object' && error !== null && ('code' in error || 'data' in error)) && error instanceof Error && error.stack !== null && typeof error.stack === 'string') {
         console.error(colorize("gray", error.stack.split('\n').slice(1, 3).join('\n')));
       }
     } finally {
-      rl.prompt();
+      if (shouldPrompt) {
+        rl.prompt();
+      }
     }
   }).on("close", () => {
     console.log(colorize("yellow", "\nExiting A2A Terminal Client. Goodbye!"));
