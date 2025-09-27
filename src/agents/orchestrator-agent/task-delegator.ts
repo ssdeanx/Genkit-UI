@@ -1,5 +1,17 @@
-import type { ResearchStep, ResearchStepExecution, TaskRequest, AgentType, OrchestrationState } from '../shared/interfaces.js';
+import type {
+  ResearchStep,
+  ResearchStepExecution,
+  TaskRequest,
+  AgentType,
+  OrchestrationState,
+  ResultPayload,
+  TaskResponse,
+  ResearchStepResult,
+  SynthesisResult,
+  ResearchResult
+} from '../shared/interfaces.js';
 import type { A2ACommunicationManager } from './a2a-communication.js';
+import { log } from './logger.js';
 
 /**
  * Task Delegation System for the Orchestrator Agent
@@ -30,7 +42,7 @@ export class TaskDelegator {
         executions.push(execution);
         this.activeTasks.set(step.id, execution);
       } catch (error) {
-        console.error(`Failed to delegate step ${step.id}:`, error);
+        log('error', `Failed to delegate step ${step.id}:`, error);
         // Continue with other steps - error recovery will handle this
       }
     }
@@ -116,7 +128,7 @@ export class TaskDelegator {
 
     } catch (error) {
       execution.status = 'failed';
-      console.error(`Failed to delegate step ${step.id}:`, error);
+      log('error', `Failed to delegate step ${step.id}:`, error);
     }
 
     return execution;
@@ -379,9 +391,97 @@ export class TaskDelegator {
     if (execution) {
       execution.status = 'completed';
       execution.completedAt = new Date();
-      execution.result = response; // Store the response as the task result
-      console.log(`Task completed for step ${stepId}`);
+      // Normalize the unknown response into a safe ResultPayload before storing
+      execution.result = this.normalizeResultPayload(response);
+      log('log', `Task completed for step ${stepId}`);
     }
+  }
+
+  /**
+   * Normalize an unknown response into the union type ResultPayload.
+   * - Performs lightweight structural checks to identify known shapes.
+   * - Falls back to a safe Record<string, unknown> or null for primitives/unknowns.
+   */
+  private normalizeResultPayload(response: unknown): ResultPayload {
+    try {
+      if (response === null || response === undefined) {
+        return null;
+      }
+
+      if (typeof response === 'object') {
+        const obj = response as Record<string, unknown>;
+
+        if (this.isTaskResponse(obj)) {
+          return obj as TaskResponse;
+        }
+
+        if (this.isResearchStepResult(obj)) {
+          return obj as ResearchStepResult;
+        }
+
+        if (this.isSynthesisResult(obj)) {
+          return obj as SynthesisResult;
+        }
+
+        if (this.isResearchResult(obj)) {
+          return obj as ResearchResult;
+        }
+
+        // Generic object fallback
+        return obj;
+      }
+
+      // Primitive values -> wrap in a record to preserve the data
+      return { value: response } as Record<string, unknown>;
+    } catch {
+      // If anything unexpected occurs, capture a sanitized fallback
+      return { error: 'Failed to normalize response', rawType: typeof response } as Record<string, unknown>;
+    }
+  }
+
+  /**
+   * Helper to explicitly check for non-null objects (satisfies linter rule
+   * that disallows using truthiness checks on unknown/any).
+   */
+  private isObject(obj: unknown): obj is Record<string, unknown> {
+    return obj !== null && obj !== undefined && typeof obj === 'object';
+  }
+
+  // Lightweight structural guards (do not attempt full validation here)
+  private isTaskResponse(obj: unknown): obj is TaskResponse {
+    if (!this.isObject(obj)) {
+      return false;
+    }
+    const o = obj;
+    return typeof o['taskId'] === 'string' && typeof o['status'] === 'string';
+  }
+
+  private isResearchStepResult(obj: unknown): obj is ResearchStepResult {
+    if (!this.isObject(obj)) {
+      return false;
+    }
+    const o = obj;
+    return typeof o['stepId'] === 'string' && typeof o['status'] === 'string';
+  }
+
+  private isSynthesisResult(obj: unknown): obj is SynthesisResult {
+    if (!this.isObject(obj)) {
+      return false;
+    }
+    const o = obj;
+    return (
+      typeof o['id'] === 'string' &&
+      typeof o['researchId'] === 'string' &&
+      typeof o['synthesis'] === 'string'
+    );
+  }
+
+  private isResearchResult(obj: unknown): obj is ResearchResult {
+    if (!this.isObject(obj)) {
+      return false;
+    }
+    const o = obj;
+    return typeof o['topic'] === 'string' && Array.isArray(o['findings']);
   }
 
   /**
@@ -392,7 +492,7 @@ export class TaskDelegator {
     if (execution) {
       execution.status = 'failed';
       execution.completedAt = new Date();
-      console.error(`Task failed for step ${stepId}:`, error);
+      log('error', `Task failed for step ${stepId}:`, error);
     }
   }
 
@@ -420,7 +520,7 @@ export class TaskDelegator {
       this.activeTasks.delete(stepId);
       return true;
     } catch (error) {
-      console.error(`Failed to cancel task for step ${stepId}:`, error);
+      log('error', `Failed to cancel task for step ${stepId}:`, error);
       return false;
     }
   }

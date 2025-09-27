@@ -1,4 +1,5 @@
 import type { ResearchStepResult, OrchestrationState, SynthesisResult } from '../shared/interfaces.js';
+import { log } from './logger.js';
 
 /**
  * Synthesis Engine for the Orchestrator Agent
@@ -53,7 +54,7 @@ export class SynthesisEngine {
       };
 
     } catch (error) {
-      console.error('Synthesis failed:', error);
+      log('error', 'Synthesis failed:', error);
       throw new Error(`Synthesis engine failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -401,7 +402,6 @@ export class SynthesisEngine {
     }>,
     objectives: string[]
   ): string {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const highConfidenceFindings = findings.filter(f => f.confidence >= 0.8);
     const confirmedFindings = findings.filter(f => f.validationStatus === 'confirmed');
 

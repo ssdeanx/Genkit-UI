@@ -9,5 +9,5 @@ console.error = (...args: unknown[]) => {
   if (first.includes('[OrchestratorAgentExecutor]')) {
     return;
   }
-  origError(...(args as []));
+  origError(...args);
 };

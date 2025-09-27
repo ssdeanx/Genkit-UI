@@ -1,5 +1,5 @@
-/* eslint-disable no-console */
 import type { A2AMessage, TaskRequest, TaskResponse, AgentType } from '../shared/interfaces.js';
+import { log } from './logger.js';
 
 /**
  * A2A Communication Manager for orchestrating inter-agent messaging
@@ -89,7 +89,7 @@ export class A2ACommunicationManager {
       return await Promise.all(promises);
     } catch (error) {
       // Log partial failures but continue with successful responses
-      console.error('Some parallel tasks failed:', error);
+      log('error', 'Some parallel tasks failed:', error);
       throw error;
     }
   }
@@ -133,7 +133,7 @@ export class A2ACommunicationManager {
    * Handle task timeout
    */
   private handleTaskTimeout(taskId: string): void {
-    console.warn(`Task ${taskId} timed out`);
+    log('warn', `Task ${taskId} timed out`);
     this.pendingTasks.delete(taskId);
     this.taskTimeouts.delete(taskId);
 
@@ -199,13 +199,13 @@ export class MessageRouter {
 
   private async handleStatusUpdate(message: A2AMessage): Promise<void> {
     // Handle status updates from agents
-    console.log(`Status update from ${message.from}:`, message.payload);
+    log('log', `Status update from ${message.from}:`, message.payload);
     // In a real implementation, this would update orchestration state
   }
 
   private async handleError(message: A2AMessage): Promise<void> {
     // Handle error messages from agents
-    console.error(`Error from ${message.from}:`, message.payload);
+    log('error', `Error from ${message.from}:`, message.payload);
     // In a real implementation, this would trigger error recovery
   }
 
@@ -213,12 +213,12 @@ export class MessageRouter {
     // Validate payload shape at runtime since message.payload is typed as unknown
     const {payload} = message;
     if (typeof payload !== 'object' || payload === null) {
-      console.warn(`Cancel message from ${message.from} has invalid payload:`, payload);
+      log('warn', `Cancel message from ${message.from} has invalid payload:`, payload);
       return false;
     }
     const maybe = payload as { taskId?: unknown };
     if (typeof maybe.taskId !== 'string') {
-      console.warn(`Cancel message from ${message.from} missing valid taskId:`, payload);
+      log('warn', `Cancel message from ${message.from} missing valid taskId:`, payload);
       return false;
     }
 

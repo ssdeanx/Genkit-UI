@@ -93,7 +93,11 @@ export default [
       '.github/**',
       '.gemini/**',
       'plans/**',
-      'chroma/**'
+      'chroma/**',
+      '.github/prompts/*.md',
+      '.github/instructions/*.md',
+      '.github/workflows/*.yml',
+      '.github/*.md'
     ]
   }
 ]

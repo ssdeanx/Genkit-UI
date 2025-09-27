@@ -25,26 +25,20 @@ import type {
 } from "../shared/interfaces.js";
 import { TaskDelegator } from "./task-delegator.js";
 import { A2ACommunicationManager } from "./a2a-communication.js";
+import { log } from './logger.js';
 
-/* eslint-disable no-console */
-function log(level: 'log' | 'warn' | 'error', message: string, ...args: unknown[]): void {
-  const prefix = `[OrchestratorAgentExecutor]`;
-  if (level === 'log') {
-    console.log(`${prefix} ${message}`, ...args);
-  } else if (level === 'warn') {
-    console.warn(`${prefix} ${message}`, ...args);
-  } else {
-    console.error(`${prefix} ${message}`, ...args);
-  }
+/* use centralized logger */
+
+function isTestEnvironment(): boolean {
+  return process.env.NODE_ENV === 'test';
 }
-/* eslint-enable no-console */
-
 if (process.env.GEMINI_API_KEY === undefined || process.env.GEMINI_API_KEY === '') {
-  if (process.env.NODE_ENV !== 'test') {
+  if (isTestEnvironment()) {
+    log('warn', 'GEMINI_API_KEY not set; continuing in test environment.');
+    // Early return: do not exit in test environment
+  } else {
     log('error', "GEMINI_API_KEY environment variable not set.");
     process.exit(1);
-  } else {
-    log('warn', 'GEMINI_API_KEY not set; continuing in test environment.');
   }
 }
 

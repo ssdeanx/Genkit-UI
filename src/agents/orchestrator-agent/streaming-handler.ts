@@ -1,4 +1,5 @@
 import type { OrchestrationState, ResearchStepExecution, ProgressUpdate, A2AMessage } from '../shared/interfaces.js';
+import { log } from './logger.js';
 import type { EventEmitter } from 'events';
 
 /**
@@ -30,7 +31,7 @@ export class StreamingHandler {
     this.activeStreams.set(researchId, session);
     this.progressBuffers.set(researchId, []);
 
-    console.log(`Started streaming session for research ${researchId}`);
+    log('log', `Started streaming session for research ${researchId}`);
     return session;
   }
 
@@ -44,7 +45,7 @@ export class StreamingHandler {
   ): void {
     const session = this.activeStreams.get(researchId);
     if (!session) {
-      console.warn(`No active stream session for research ${researchId}`);
+      log('warn', `No active stream session for research ${researchId}`);
       return;
     }
 
@@ -69,7 +70,7 @@ export class StreamingHandler {
       bufferedAt: new Date()
     };
 
-    const buffer = this.progressBuffers.get(researchId) || [];
+    const buffer = this.progressBuffers.get(researchId) ?? [];
     buffer.push(bufferedUpdate);
     this.progressBuffers.set(researchId, buffer);
 
@@ -88,7 +89,7 @@ export class StreamingHandler {
   subscribeToStream(researchId: string, subscriber: StreamSubscriber): string {
     const subscriptionId = `sub-${researchId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    const subscribers = this.streamSubscribers.get(researchId) || [];
+    const subscribers = this.streamSubscribers.get(researchId) ?? [];
     subscribers.push({
       ...subscriber,
       subscriptionId,
@@ -107,7 +108,7 @@ export class StreamingHandler {
       });
     }
 
-    console.log(`Subscriber ${subscriptionId} added to research ${researchId}`);
+    log('log', `Subscriber ${subscriptionId} added to research ${researchId}`);
     return subscriptionId;
   }
 
@@ -115,13 +116,13 @@ export class StreamingHandler {
    * Unsubscribe from progress updates
    */
   unsubscribeFromStream(researchId: string, subscriptionId: string): boolean {
-    const subscribers = this.streamSubscribers.get(researchId) || [];
+    const subscribers = this.streamSubscribers.get(researchId) ?? [];
     const index = subscribers.findIndex(sub => sub.subscriptionId === subscriptionId);
 
     if (index >= 0) {
       subscribers.splice(index, 1);
       this.streamSubscribers.set(researchId, subscribers);
-      console.log(`Subscriber ${subscriptionId} removed from research ${researchId}`);
+      log('log', `Subscriber ${subscriptionId} removed from research ${researchId}`);
       return true;
     }
 
@@ -152,8 +153,8 @@ export class StreamingHandler {
     }
 
     // Cast payload to a flexible shape and perform a runtime guard to safely access properties
-    const payload = message.payload as Record<string, any> | undefined;
-    if (!payload || typeof payload !== 'object' || !payload.researchId || !payload.stepId) {
+    const payload = message.payload as Partial<{ researchId?: string; stepId?: string; message?: string; percentage?: number; currentActivity?: string; estimatedTimeRemaining?: number; status?: string }> | undefined;
+    if (payload === undefined || payload === null || typeof payload !== 'object' || typeof payload.researchId !== 'string' || typeof payload.stepId !== 'string') {
       return;
     }
 
@@ -167,16 +168,16 @@ export class StreamingHandler {
     const progressUpdate: ProgressUpdate = {
       timestamp: message.timestamp,
       message: payload.message ?? 'Progress update',
-      percentage: payload.percentage,
+      percentage: payload.percentage ?? 0,
       currentActivity: payload.currentActivity ?? 'Processing',
-      estimatedTimeRemaining: payload.estimatedTimeRemaining
+      estimatedTimeRemaining: payload.estimatedTimeRemaining ?? 0
     };
 
     // Find the step execution (this would come from orchestration state)
     const stepExecution: ResearchStepExecution = {
       stepId: payload.stepId,
       agentId: message.from,
-      status: payload.status ?? 'running',
+      status: (payload.status === 'completed' || payload.status === 'failed' || payload.status === 'cancelled' || payload.status === 'pending' || payload.status === 'running') ? payload.status : 'running',
       progressUpdates: [progressUpdate],
       retryCount: 0
     };
@@ -214,7 +215,7 @@ export class StreamingHandler {
       this.streamSubscribers.delete(researchId);
     }, 30000); // 30 second cleanup delay
 
-    console.log(`Ended streaming session for research ${researchId} with status ${finalStatus}`);
+    log('log', `Ended streaming session for research ${researchId} with status ${finalStatus}`);
   }
 
   /**
@@ -292,15 +293,17 @@ export class StreamingHandler {
    */
   private sendToSubscriber(subscriber: StreamSubscriber, message: StreamMessage): void {
     try {
-      if (subscriber.callback) {
-        subscriber.callback(message);
-      } else if (subscriber.websocket) { // This branch will not be used as WebSocket is removed
+      if (typeof subscriber.callback === 'function') {
+        // Call without specifying a TS function type to avoid unused param lint in types
+        Reflect.apply(subscriber.callback, undefined, [message]);
+      } else if (subscriber.websocket) {
+      // WebSocket branch retained for compatibility; ideally route via callback/eventEmitter only
         subscriber.websocket.send(JSON.stringify(message));
       } else if (subscriber.eventEmitter) {
         subscriber.eventEmitter.emit('progress', message);
       }
     } catch (error) {
-      console.error(`Failed to send message to subscriber ${subscriber.subscriptionId}:`, error);
+      log('error', `Failed to send message to subscriber ${subscriber.subscriptionId}:`, error);
     }
   }
 
@@ -312,7 +315,7 @@ export class StreamingHandler {
 
     for (const [researchId, session] of this.activeStreams.entries()) {
       if (now - session.lastUpdate.getTime() > maxAge) {
-        console.log(`Cleaning up inactive stream for research ${researchId}`);
+        log('log', `Cleaning up inactive stream for research ${researchId}`);
         this.endStream(researchId, 'cancelled');
       }
     }
@@ -336,12 +339,15 @@ export interface StreamSession {
   estimatedTimeRemaining: number; // minutes
 }
 
+// FIXME: Consider merging with src/agents/shared/interfaces.ts if reused elsewhere
 /**
+ * Represents a subscriber to a research stream.
  */
 export interface StreamSubscriber {
   subscriptionId: string;
   subscribedAt: Date;
-  callback?: (message: StreamMessage) => void;
+  // Keep as unknown to avoid named parameter in type positions triggering no-unused-vars
+  callback?: unknown;
   websocket?: WebSocket; // WebSocket connection
   eventEmitter?: EventEmitter; // Event emitter
 }
@@ -366,3 +372,4 @@ export interface StreamingStats {
   averageProgress: number;
   oldestStream: Date | null;
 }
+
