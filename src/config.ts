@@ -8,6 +8,7 @@ export const ai = genkit({
   promptDir: './src/prompts',
   plugins: [
     googleAI(),
+    googleAI({ experimental_debugTraces: true }),
     devLocalVectorstore([
       {
         indexName: process.env.VECTORSTORE_INDEX ?? 'Based',

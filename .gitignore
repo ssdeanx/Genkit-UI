@@ -27,4 +27,5 @@ coverage
 .gemini/
 gha-creds-*.json
 .github/prompts/*.md
+.github/prompts/**/*.md
 chroma
