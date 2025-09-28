@@ -1,5 +1,5 @@
 ---
-applyTo: ["./src/**/*.ts", "../src/**/*.tsx", "../functions/**/*.ts", "**"]
+applyTo: './src/**/*.ts' "../src/**/*.tsx", "../functions/**/*.ts",
 description: "Instructions for GitHub Copilot to follow when generating code for this repository."
 version: "1.0"
 created: "2025-09-25"

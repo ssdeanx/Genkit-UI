@@ -76,6 +76,149 @@ describe('A2ACommunicationManager', () => {
     expect(status).toBe('not-found');
   });
 
+  it('throws if endpoint is not configured for agent type', async () => {
+    const manager = new A2ACommunicationManager();
+
+    // Break the endpoint configuration intentionally
+    manager.updateAgentEndpoint('web-research', '');
+
+    const taskRequest: TaskRequest = {
+      taskId: 't-no-endpoint',
+      type: 'web-search',
+      parameters: {},
+      priority: 1,
+      timeout: 100,
+      metadata: {},
+      step: makeStep('no-endpoint'),
+    };
+
+    await expect(manager.sendTask('web-research', taskRequest)).rejects.toThrow('No endpoint configured');
+  });
+
+  it('throws when fetch responds non-ok and cleans pending', async () => {
+    const manager = new A2ACommunicationManager();
+
+    const taskRequest: TaskRequest = {
+      taskId: 't-bad-status',
+      type: 'web-search',
+      parameters: {},
+      priority: 1,
+      timeout: 100,
+      metadata: {},
+      step: makeStep('bad-status'),
+    };
+
+    const fakeFetchResponse = { ok: false, status: 500, statusText: 'Internal Server Error' } as unknown as Response;
+    globalThis.fetch = vi.fn().mockResolvedValue(fakeFetchResponse) as unknown as typeof globalThis.fetch;
+
+    await expect(manager.sendTask('web-research', taskRequest)).rejects.toThrow('Agent request failed: 500 Internal Server Error');
+    expect(await manager.checkTaskStatus('t-bad-status')).toBe('not-found');
+  });
+
+  it('marks task as pending before completion and supports cancel', async () => {
+    const manager = new A2ACommunicationManager();
+
+    const taskRequest: TaskRequest = {
+      taskId: 't-pending',
+      type: 'web-search',
+      parameters: {},
+      priority: 1,
+      timeout: 1000,
+      metadata: {},
+      step: makeStep('pending'),
+    };
+
+    // Create a fetch promise we can resolve later to keep it pending
+    let resolveFetch: (r: Response) => void;
+    const fetchPromise = new Promise<Response>(res => { resolveFetch = res; });
+    globalThis.fetch = vi.fn().mockReturnValue(fetchPromise) as unknown as typeof globalThis.fetch;
+
+    const sendPromise = manager.sendTask('web-research', taskRequest);
+    // Immediately after starting, task should be tracked as pending
+    expect(await manager.checkTaskStatus('t-pending')).toBe('pending');
+
+    // Cancel it and ensure it is removed
+    const cancelled = await manager.cancelTask('t-pending');
+    expect(cancelled).toBe(true);
+    expect(await manager.checkTaskStatus('t-pending')).toBe('not-found');
+
+    // Resolve fetch to let the sendTask promise settle; implementation resolves even after cancel
+    resolveFetch!({ ok: true, json: async () => ({ taskId: 't-pending', status: 'success', processingTime: 1 }) } as unknown as Response);
+    await expect(sendPromise).resolves.toMatchObject({ taskId: 't-pending', status: 'success' });
+    // still not tracked as pending
+    expect(await manager.checkTaskStatus('t-pending')).toBe('not-found');
+  });
+
+  it('handles timeout path before fetch resolves (using fake timers)', async () => {
+    vi.useFakeTimers();
+    const manager = new A2ACommunicationManager();
+
+    const taskRequest: TaskRequest = {
+      taskId: 't-timeout',
+      type: 'web-search',
+      parameters: {},
+      priority: 1,
+      timeout: 5, // very short timeout
+      metadata: {},
+      step: makeStep('timeout'),
+    };
+
+    let resolveFetch: (r: Response) => void;
+    const fetchPromise = new Promise<Response>(res => { resolveFetch = res; });
+    globalThis.fetch = vi.fn().mockReturnValue(fetchPromise) as unknown as typeof globalThis.fetch;
+
+    const sendPromise = manager.sendTask('web-research', taskRequest);
+
+    // Advance timers to trigger the internal timeout before fetch resolves
+    vi.advanceTimersByTime(10);
+
+    // After timeout, status should no longer be pending
+    const statusAfterTimeout = await manager.checkTaskStatus('t-timeout');
+    expect(statusAfterTimeout).toBe('not-found');
+
+    // Now resolve fetch; sendTask should eventually succeed and return a response
+    resolveFetch!({ ok: true, json: async () => ({ taskId: 't-timeout', status: 'success', processingTime: 3 }) } as unknown as Response);
+
+    const resp = await sendPromise;
+    expect(resp.taskId).toBe('t-timeout');
+    vi.useRealTimers();
+  });
+
+  it('sendParallelTasks propagates rejection when any task fails', async () => {
+    const manager = new A2ACommunicationManager();
+
+    const t1: TaskRequest = { taskId: 'ok1', type: 'web-search', parameters: {}, priority: 1, timeout: 100, metadata: {}, step: makeStep('ok1') };
+    const t2: TaskRequest = { taskId: 'bad2', type: 'web-search', parameters: {}, priority: 1, timeout: 100, metadata: {}, step: makeStep('bad2') };
+
+    const r1: TaskResponse = { taskId: 'ok1', status: 'success', processingTime: 1 };
+    const okFetch = { ok: true, json: async () => r1 } as unknown as Response;
+    const badFetch = { ok: false, status: 503, statusText: 'Service Unavailable' } as unknown as Response;
+
+    globalThis.fetch = (vi.fn()
+      .mockResolvedValueOnce(okFetch)
+      .mockResolvedValueOnce(badFetch)) as unknown as typeof globalThis.fetch;
+
+    await expect(manager.sendParallelTasks([
+      { agentType: 'web-research', taskRequest: t1 },
+      { agentType: 'web-research', taskRequest: t2 },
+    ])).rejects.toThrow('Agent request failed: 503 Service Unavailable');
+  });
+
+  it('cancelTask returns false when task not found', async () => {
+    const manager = new A2ACommunicationManager();
+    const result = await manager.cancelTask('does-not-exist');
+    expect(result).toBe(false);
+  });
+
+  it('exposes and updates agent endpoints', () => {
+    const manager = new A2ACommunicationManager();
+    const before = manager.getAgentEndpoints();
+    expect(before['web-research']).toBeTruthy();
+    manager.updateAgentEndpoint('web-research', 'http://example.com');
+    const after = manager.getAgentEndpoints();
+    expect(after['web-research']).toBe('http://example.com');
+  });
+
   it('sendParallelTasks returns multiple responses', async () => {
     const manager = new A2ACommunicationManager();
 
@@ -119,6 +262,53 @@ describe('MessageRouter', () => {
     const resp = await router.routeMessage(msg);
     expect((fakeManager.sendTask as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1);
     expect((resp as TaskResponse).taskId).toBe('mr1');
+  });
+
+  it('handles status-update and error messages without throwing', async () => {
+    const fakeManager = { cancelTask: vi.fn() } as unknown as A2ACommunicationManager;
+    const router = new MessageRouter(fakeManager);
+
+    const statusMsg: A2AMessage = { id: 's1', from: 'agent', to: 'orchestrator', type: 'status-update', payload: { state: 'running' }, timestamp: new Date() };
+    const errorMsg: A2AMessage = { id: 'e1', from: 'agent', to: 'orchestrator', type: 'error', payload: { message: 'boom' }, timestamp: new Date() };
+
+    await expect(router.routeMessage(statusMsg)).resolves.toBeUndefined();
+    await expect(router.routeMessage(errorMsg)).resolves.toBeUndefined();
+  });
+
+  it('throws on unknown message type and on unimplemented task-response', async () => {
+    const router = new MessageRouter({} as unknown as A2ACommunicationManager);
+
+    const badType: A2AMessage = { id: 'u1', from: 'x', to: 'y', type: 'unknown' as any, payload: {}, timestamp: new Date() };
+    await expect(router.routeMessage(badType)).rejects.toThrow('Unknown message type');
+
+    const unimpl: A2AMessage = { id: 'u2', from: 'x', to: 'y', type: 'task-response', payload: {}, timestamp: new Date() };
+    await expect(router.routeMessage(unimpl)).rejects.toThrow('Not implemented yet');
+  });
+
+  it('determines agent type from task type in task-request', async () => {
+    const captured: Array<AgentType> = [];
+    const fakeManager = {
+      sendTask: vi.fn(async (agentType: AgentType) => {
+        captured.push(agentType);
+        return { taskId: 'any', status: 'success', processingTime: 1 } as TaskResponse;
+      })
+    } as unknown as A2ACommunicationManager;
+    const router = new MessageRouter(fakeManager);
+
+    const msgs: Array<{ t: string; expected: AgentType }> = [
+      { t: 'web-search', expected: 'web-research' },
+      { t: 'academic-scholar', expected: 'academic-research' },
+      { t: 'news-current', expected: 'news-research' },
+      { t: 'data-analysis', expected: 'data-analysis' },
+      { t: 'misc', expected: 'web-research' }, // default
+    ];
+
+    for (const [i, { t }] of msgs.entries()) {
+      const msg: A2AMessage = { id: `m${i}`, from: 'a', to: 'o', type: 'task-request', payload: { taskId: `id${i}`, type: t, parameters: {}, priority: 1, step: makeStep(`st${i}`) }, timestamp: new Date() };
+      await router.routeMessage(msg);
+    }
+
+    expect(captured).toEqual(['web-research', 'academic-research', 'news-research', 'data-analysis', 'web-research']);
   });
 
   it('handles cancel messages and delegates to communication manager.cancelTask', async () => {

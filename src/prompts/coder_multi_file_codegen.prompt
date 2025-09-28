@@ -4,6 +4,7 @@ config:
   temperature: 0.2
   topP: 0.5
   maxOutputTokens: 64000
+tools: [calculatorTool]
 input:
   schema:
     specification: string

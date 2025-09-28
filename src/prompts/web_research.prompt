@@ -10,6 +10,7 @@ config:
   googleSearchRetrieval: true
   structuredOutput:
     enabled: true
+tools: [webScrapingTool, wikipediaTool, weatherTool]
 input:
   schema: WebResearchInput
   default:
