@@ -8,7 +8,7 @@ What works
 
 What’s left
 
-- Expand tests for agents and A2A interactions
+- Expand tests for agents and A2A interactions (ongoing but major suites added)
 - Harden tools (rate limits, errors) and add real API keys where needed
 - CI: ensure lint/typecheck/tests gates, add docs link validation
 
@@ -19,4 +19,6 @@ Known issues / risks
 
 Recent updates
 
-- 2025-09-28: Orchestrator AgentCard.protocolVersion aligned to 0.3.0; shared AgentCard type aliased to SDK; optional A2AClient path added to comms manager; tests run green (83/83); flows at 100% coverage.
+- 2025-09-28: Research agents (web/news/academic) tests implemented; minor query composition fixes applied; suites green.
+- 2025-09-28: Orchestrator and planning-agent suites validated green; A2A comms supports DI and streaming tests.
+- 2025-09-28: Coder agent index uses main logger and runtime key guard; executor fix in progress by user.

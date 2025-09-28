@@ -3,6 +3,8 @@
 ## In Progress
 
 - [TASK002](./TASK002-expand-tests.md) Expand flow & tool tests — Added planning-agent unit tests; continue increasing tool coverage
+- [TASK007](./TASK007-final-executor-fix.md) Final executor fix — User actively fixing coder executor
+- [TASK006](./TASK006-remaining-agents-tests.md) Remaining agents tests — Scoping and planning
 
 ## Pending
 

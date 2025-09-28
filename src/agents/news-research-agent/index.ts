@@ -511,7 +511,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
 // --- Server Setup ---
 
 const newsResearchAgentCard: AgentCard = {
-  protocolVersion: '1.0',
+  protocolVersion: '0.3.4',
   name: 'News Research Agent',
   description:
     'An agent that conducts comprehensive news research, analyzes current events, and evaluates media credibility across multiple news sources.',

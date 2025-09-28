@@ -447,7 +447,7 @@ class WebResearchAgentExecutor implements AgentExecutor {
 // --- Server Setup ---
 
 const webResearchAgentCard: AgentCard = {
-  protocolVersion: '1.0',
+  protocolVersion: '0.3.4',
   name: 'Web Research Agent',
   description:
     'An agent that conducts comprehensive web-based research with credibility assessment and source verification.',
@@ -456,7 +456,7 @@ const webResearchAgentCard: AgentCard = {
     organization: 'A2A Samples',
     url: 'https://example.com/a2a-samples',
   },
-  version: '0.0.1',
+  version: '0.0.3',
   capabilities: {
     streaming: true,
     pushNotifications: false,

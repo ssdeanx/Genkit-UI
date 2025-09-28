@@ -1,246 +1,19 @@
 import express from "express";
-import { v4 as uuidv4 } from "uuid"; // For generating unique IDs
-
-import type {
-  AgentCard,
-  Task,
-  TaskStatusUpdateEvent,
-  TextPart,
-  Message,
-} from "@a2a-js/sdk";
-import {
-  InMemoryTaskStore,
-  type TaskStore,
-  type AgentExecutor,
-  RequestContext,
-  type ExecutionEventBus,
-  DefaultRequestHandler,
-} from "@a2a-js/sdk/server"; // Import server components
+import type { AgentCard } from "@a2a-js/sdk";
+import { InMemoryTaskStore, type TaskStore, type AgentExecutor, DefaultRequestHandler } from "@a2a-js/sdk/server";
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
-import type { MessageData } from "genkit";
-import { ai } from "./genkit.js";
-
 import * as dotenv from "dotenv";
+import { flowlogger } from "./../../logger.js";
+import { ContentEditorAgentExecutor } from "./executor.js";
+
 dotenv.config();
 
-if (!process.env.GOOGLE_API_KEY) {
-  console.error("GOOGLE_API_KEY environment variable is not set.");
-  throw new Error("GOOGLE_API_KEY environment variable is not set.");
-}
-
-const contentEditorPrompt = ai.prompt("content_editor");
-
-class ContentEditorAgentExecutor implements AgentExecutor {
-  private cancelledTasks = new Set<string>();
-
-  public cancelTask = async (
-    taskId: string,
-    eventBus: ExecutionEventBus,
-  ): Promise<void> => {
-    this.cancelledTasks.add(taskId);
-    // Publish immediate cancellation event
-    const cancelledUpdate: TaskStatusUpdateEvent = {
-      kind: 'status-update',
-      taskId: taskId,
-      contextId: uuidv4(), // Generate context ID for cancellation
-      status: {
-        state: 'canceled',
-        message: {
-          kind: 'message',
-          role: 'agent',
-          messageId: uuidv4(),
-          parts: [{ kind: 'text', text: 'Content editing cancelled.' }],
-          taskId: taskId,
-          contextId: uuidv4(),
-        },
-        timestamp: new Date().toISOString(),
-      },
-      final: true,
-    };
-    eventBus.publish(cancelledUpdate);
-  };
-
-  async execute(
-    requestContext: RequestContext,
-    eventBus: ExecutionEventBus,
-  ): Promise<void> {
-    const {userMessage} = requestContext;
-    const existingTask = requestContext.task;
-
-    const taskId = existingTask?.id || uuidv4();
-    const contextId =
-      userMessage.contextId || existingTask?.contextId || uuidv4();
-
-    console.log(
-      `[ContentEditorAgentExecutor] Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId})`,
-    );
-
-    if (!existingTask) {
-      const initialTask: Task = {
-        kind: "task",
-        id: taskId,
-        contextId: contextId,
-        status: {
-          state: "submitted",
-          timestamp: new Date().toISOString(),
-        },
-        history: [userMessage],
-        // Ensure metadata is never undefined to satisfy Task type
-        metadata: userMessage.metadata ?? {},
-      };
-      eventBus.publish(initialTask);
-    }
-
-    const workingStatusUpdate: TaskStatusUpdateEvent = {
-      kind: "status-update",
-      taskId: taskId,
-      contextId: contextId,
-      status: {
-        state: "working",
-        message: {
-          kind: "message",
-          role: "agent",
-          messageId: uuidv4(),
-          parts: [{ kind: "text", text: "Editing content..." }],
-          taskId: taskId,
-          contextId: contextId,
-        },
-        timestamp: new Date().toISOString(),
-      },
-      final: false,
-    };
-    eventBus.publish(workingStatusUpdate);
-
-    const historyForGenkit = existingTask?.history
-      ? [...existingTask.history]
-      : [];
-    if (!historyForGenkit.find((m) => m.messageId === userMessage.messageId)) {
-      historyForGenkit.push(userMessage);
-    }
-
-    const messages: MessageData[] = historyForGenkit
-      .map((m) => ({
-        role: (m.role === "agent" ? "model" : "user") as "user" | "model",
-        content: m.parts
-          .filter(
-            (p): p is TextPart => p.kind === "text" && !!(p as TextPart).text,
-          )
-          .map((p) => ({
-            text: (p as TextPart).text,
-          })),
-      }))
-      .filter((m) => m.content.length > 0);
-
-    if (messages.length === 0) {
-      console.warn(
-        `[ContentEditorAgentExecutor] No valid text messages found in history for task ${taskId}.`,
-      );
-      const failureUpdate: TaskStatusUpdateEvent = {
-        kind: "status-update",
-        taskId: taskId,
-        contextId: contextId,
-        status: {
-          state: "failed",
-          message: {
-            kind: "message",
-            role: "agent",
-            messageId: uuidv4(),
-            parts: [{ kind: "text", text: "No message found to process." }],
-            taskId: taskId,
-            contextId: contextId,
-          },
-          timestamp: new Date().toISOString(),
-        },
-        final: true,
-      };
-      eventBus.publish(failureUpdate);
-      return;
-    }
-
-    try {
-      const response = await contentEditorPrompt(
-        {},
-        {
-          messages,
-        },
-      );
-
-      if (this.cancelledTasks.has(taskId)) {
-        console.log(
-          `[ContentEditorAgentExecutor] Request cancelled for task: ${taskId}`,
-        );
-
-        const cancelledUpdate: TaskStatusUpdateEvent = {
-          kind: "status-update",
-          taskId: taskId,
-          contextId: contextId,
-          status: {
-            state: "canceled",
-            timestamp: new Date().toISOString(),
-          },
-          final: true,
-        };
-        eventBus.publish(cancelledUpdate);
-        return;
-      }
-
-      const responseText = response.text;
-      console.info(
-        `[ContentEditorAgentExecutor] Prompt response: ${responseText}`,
-      );
-
-      const agentMessage: Message = {
-        kind: "message",
-        role: "agent",
-        messageId: uuidv4(),
-        parts: [{ kind: "text", text: responseText || "Completed." }],
-        taskId: taskId,
-        contextId: contextId,
-      };
-
-      const finalUpdate: TaskStatusUpdateEvent = {
-        kind: "status-update",
-        taskId: taskId,
-        contextId: contextId,
-        status: {
-          state: "completed",
-          message: agentMessage,
-          timestamp: new Date().toISOString(),
-        },
-        final: true,
-      };
-      eventBus.publish(finalUpdate);
-
-      console.log(
-        `[ContentEditorAgentExecutor] Task ${taskId} finished with state: completed`,
-      );
-    } catch (error: unknown) {
-      console.error(
-        `[ContentEditorAgentExecutor] Error processing task ${taskId}:`,
-        error,
-      );
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      const errorUpdate: TaskStatusUpdateEvent = {
-        kind: "status-update",
-        taskId: taskId,
-        contextId: contextId,
-        status: {
-          state: "failed",
-          message: {
-            kind: "message",
-            role: "agent",
-            messageId: uuidv4(),
-            parts: [{ kind: "text", text: `Agent error: ${errorMessage}` }],
-            taskId: taskId,
-            contextId: contextId,
-          },
-          timestamp: new Date().toISOString(),
-        },
-        final: true,
-      };
-      eventBus.publish(errorUpdate);
-    }
+// Runtime guard only outside test; use main logger
+if (process.env.NODE_ENV !== 'test') {
+  const googleKey = process.env.GOOGLE_API_KEY;
+  if (googleKey === undefined || googleKey === '') {
+    flowlogger.error("GOOGLE_API_KEY environment variable is not set.");
+    throw new Error("GOOGLE_API_KEY environment variable is not set.");
   }
 }
 
@@ -291,19 +64,14 @@ async function main() {
   );
 
   const appBuilder = new A2AExpressApp(requestHandler);
-  // Type assertion needed due to Express type compatibility between project and SDK versions
-  const expressApp = appBuilder.setupRoutes(express() as any);
+  const expressApp = appBuilder.setupRoutes(express(), '');
 
-  const PORT = process.env.CONTENT_EDITOR_AGENT_PORT || 10003;
+  const PORT = Number(process.env.CONTENT_EDITOR_AGENT_PORT ?? 10003);
   expressApp.listen(PORT, () => {
-    console.log(
-      `[ContentEditorAgent] Server using new framework started on http://localhost:${PORT}`,
-    );
-    console.log(
-      `[ContentEditorAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`,
-    );
-    console.log("[ContentEditorAgent] Press Ctrl+C to stop the server");
+    flowlogger.info(`[ContentEditorAgent] Server using new framework started on http://localhost:${PORT}`);
+    flowlogger.info(`[ContentEditorAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
+    flowlogger.info("[ContentEditorAgent] Press Ctrl+C to stop the server");
   });
 }
 
-main().catch(console.error);
+main().catch((e) => flowlogger.error(e));

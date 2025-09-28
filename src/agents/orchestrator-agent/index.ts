@@ -573,8 +573,8 @@ class OrchestratorAgentExecutor implements AgentExecutor {
 
 const orchestratorAgentCard: AgentCard = {
   // A2A protocol version must match the SDK major/minor we target
-  // Aligning to @a2a-js/sdk v0.3.x
-  protocolVersion: '0.3.0',
+  // Aligning to @a2a-js/sdk v0.3.4
+  protocolVersion: '0.3.4',
   name: 'Research Orchestrator Agent',
   description:
     'An agent that coordinates multi-agent research execution, manages research state, and optimizes task distribution across specialized research agents.',

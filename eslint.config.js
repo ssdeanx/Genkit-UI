@@ -4,8 +4,7 @@ import tsparser from '@typescript-eslint/parser'
 import prettierConfig from 'eslint-config-prettier'
 import googleConfig from "eslint-config-google";
 import importPlugin from "eslint-plugin-import";
-
-
+import jsdoc from "eslint-plugin-jsdoc";
 
 export default [
   // Apply Google style config so tools won't miss eslint-config-google
@@ -17,6 +16,7 @@ export default [
     plugins: {
       '@typescript-eslint': tseslint,
       import: importPlugin,
+      jsdoc: jsdoc,
     },
     languageOptions: {
       parser: tsparser,
@@ -29,6 +29,30 @@ export default [
     settings: {
     },
     rules: {
+      // Disable the old, removed valid-jsdoc rule from googleConfig
+      'valid-jsdoc': 'off', // <--- Add this line
+      'require-jsdoc': 'off', // <--- Add this line to disable require-jsdoc
+
+      // Use the recommended rules from eslint-plugin-jsdoc
+      ...jsdoc.configs['recommended'].rules,
+      'require-jsdoc': 'off',
+      'jsdoc/require-jsdoc': ['off', {
+        require: {
+          FunctionDeclaration: false,
+          MethodDefinition: false,
+          ClassDeclaration: false,
+          ArrowFunctionExpression: false,
+          FunctionExpression: false
+        }
+      }],
+      'jsdoc/require-param': 'off',
+      'jsdoc/require-returns': 'off',
+      'jsdoc/require-description': 'off',
+      'jsdoc/require-param-description': 'off',
+      'jsdoc/require-returns-description': 'off',
+      'jsdoc/no-types': 'off',
+      'jsdoc/check-alignment': 'off',
+      'jsdoc/check-indentation': 'off',
       // Standard style guide rules
       'no-unused-vars': 'warn', // Turn off base rule
       '@typescript-eslint/no-unused-vars': 'warn',

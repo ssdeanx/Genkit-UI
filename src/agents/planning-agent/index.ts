@@ -602,7 +602,7 @@ class PlanningAgentExecutor implements AgentExecutor {
 // --- Server Setup ---
 
 const planningAgentCard: AgentCard = {
-  protocolVersion: '1.0',
+  protocolVersion: '0.3.4',
   name: 'Planning Agent',
   description:
     'An agent that creates comprehensive, evidence-based research strategies with systematic planning, risk assessment, and execution blueprints.',

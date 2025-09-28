@@ -5,13 +5,13 @@ applyTo: '**'
 # Spec Driven Workflow v1
 
 **Specification-Driven Workflow:**
-Bridge the gap between requirements and implementation.
+Bridge the gap between requirements and implementation. Use this to build upon memory-banks tasks and progress with also requirements and designs. This workflow ensures clarity, traceability, and quality throughout the development lifecycle.  Adapt the workflow based on confidence in requirements.  Adjust the depth of design and planning based on certainty. Build incrementally with continuous validation. Use same patterns for documentation as memory-bank tasks.
 
 **Maintain these artifacts at all times:**
 
-- **`requirements.md`**: User stories and acceptance criteria in structured EARS notation.
-- **`design.md`**: Technical architecture, sequence diagrams, implementation considerations.
-- **`tasks.md`**: Detailed, trackable implementation plan.
+- **`/memory-bank/requirements/{slug}-requirements.md`**: User stories and acceptance criteria in structured EARS notation.
+- **`/memory-bank/designs/{slug}-design.md`**: Technical architecture, sequence diagrams, implementation considerations.
+- **`/memory-bank/tasks/{slug}-tasks.md`**: Detailed, trackable implementation plan.
 
 ## Universal Documentation Framework
 
