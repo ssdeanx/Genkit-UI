@@ -1,4 +1,6 @@
 import type { A2AMessage, TaskRequest, TaskResponse, AgentType } from '../shared/interfaces.js';
+import { A2AClient } from '@a2a-js/sdk/client';
+import type { Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent } from '@a2a-js/sdk';
 import { log } from './logger.js';
 
 /**
@@ -9,10 +11,19 @@ export class A2ACommunicationManager {
   private agentEndpoints: Map<AgentType, string> = new Map();
   private pendingTasks: Map<string, TaskRequest> = new Map();
   private taskTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private useA2AClient: boolean;
+  private useStreaming: boolean;
+  private clients: Map<AgentType, A2AClient> = new Map();
 
   constructor() {
     // Initialize agent endpoints from environment or configuration
     this.initializeAgentEndpoints();
+    // Allow opting into proper A2A JSON-RPC transport progressively
+    this.useA2AClient = (process.env.USE_A2A_CLIENT ?? 'false').toLowerCase() === 'true';
+    this.useStreaming = (process.env.USE_A2A_STREAMING ?? 'false').toLowerCase() === 'true';
+    if (this.useA2AClient) {
+      this.bootstrapClients();
+    }
   }
 
   private initializeAgentEndpoints(): void {
@@ -21,6 +32,20 @@ export class A2ACommunicationManager {
     this.agentEndpoints.set('academic-research', process.env.ACADEMIC_RESEARCH_AGENT_URL ?? 'http://localhost:41247');
     this.agentEndpoints.set('news-research', process.env.NEWS_RESEARCH_AGENT_URL ?? 'http://localhost:41248');
     this.agentEndpoints.set('data-analysis', process.env.DATA_ANALYSIS_AGENT_URL ?? 'http://localhost:41249');
+  }
+
+  private bootstrapClients(): void {
+    // Build A2A clients from configured endpoints
+    for (const [agentType, endpoint] of this.agentEndpoints.entries()) {
+      if (endpoint && endpoint.trim() !== '') {
+        try {
+          const client = new A2AClient(endpoint);
+          this.clients.set(agentType, client);
+        } catch {
+          // Fallback silently; fetch path will be used
+        }
+      }
+    }
   }
 
   /**
@@ -43,23 +68,48 @@ export class A2ACommunicationManager {
     this.taskTimeouts.set(taskRequest.taskId, timeoutHandle);
 
     try {
-      const response = await fetch(`${endpoint}/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(taskRequest),
-      });
+      let taskResponse: TaskResponse;
 
-      if (!response.ok) {
-        throw new Error(`Agent request failed: ${response.status} ${response.statusText}`);
-      }
+      if (this.useA2AClient && this.clients.has(agentType)) {
+        // Use JSON-RPC message/send with a minimal mapping from our TaskRequest
+        const client = this.clients.get(agentType)!;
+        const message: Message = {
+          kind: 'message',
+          role: 'user',
+          messageId: taskRequest.taskId,
+          taskId: taskRequest.taskId,
+          parts: [
+            { kind: 'text', text: JSON.stringify({ type: taskRequest.type, parameters: taskRequest.parameters, metadata: taskRequest.metadata }) }
+          ],
+        };
+        // Fire-and-wait single response (non-streaming) to preserve current contract
+        const res: unknown = await client.sendMessage({ message });
+        // We don't assume shape here; just wrap in our TaskResponse result
+        taskResponse = {
+          taskId: taskRequest.taskId,
+          status: 'success',
+          result: res,
+          processingTime: 0,
+        } as TaskResponse;
+      } else {
+        const response = await fetch(`${endpoint}/execute`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(taskRequest),
+        });
 
-      const raw = await response.json();
-      if (!isTaskResponse(raw)) {
-        throw new Error('Invalid TaskResponse received from agent');
+        if (!response.ok) {
+          throw new Error(`Agent request failed: ${response.status} ${response.statusText}`);
+        }
+
+        const raw = await response.json();
+        if (!isTaskResponse(raw)) {
+          throw new Error('Invalid TaskResponse received from agent');
+        }
+        taskResponse = raw;
       }
-      const taskResponse: TaskResponse = raw;
 
       // Clear timeout and pending task
       clearTimeout(timeoutHandle);
@@ -75,6 +125,107 @@ export class A2ACommunicationManager {
 
       throw new Error(`Failed to send task to ${agentType} agent: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Experimental: stream a task using A2AClient when enabled.
+   * Returns a controller with a cancel() method and a done promise that resolves when the stream finishes.
+   * If streaming is disabled or A2AClient is unavailable, falls back to sendTask and emits a single synthetic event.
+   */
+  async sendTaskStream(
+    agentType: AgentType,
+    taskRequest: TaskRequest,
+    onEvent: (event: A2AStreamEvent) => void
+  ): Promise<{ cancel: () => Promise<boolean>; done: Promise<void> }> {
+    const endpoint = this.agentEndpoints.get(agentType);
+    if (!endpoint || endpoint.trim() === '') {
+      throw new Error(`No endpoint configured for agent type: ${agentType}`);
+    }
+
+    // Track pending + timeout similar to non-streaming path
+    this.pendingTasks.set(taskRequest.taskId, taskRequest);
+    const timeout = taskRequest.timeout ?? 300000; // 5 minutes default
+    const timeoutHandle = setTimeout(() => this.handleTaskTimeout(taskRequest.taskId), timeout);
+    this.taskTimeouts.set(taskRequest.taskId, timeoutHandle);
+
+    const cleanup = () => {
+      clearTimeout(timeoutHandle);
+      this.taskTimeouts.delete(taskRequest.taskId);
+      this.pendingTasks.delete(taskRequest.taskId);
+    };
+
+    if (!(this.useA2AClient && this.useStreaming && this.clients.has(agentType))) {
+      // Fallback: perform a single request and surface as a message event
+      try {
+        const single = await this.sendTask(agentType, taskRequest);
+        const synthetic: Message = {
+          kind: 'message',
+          role: 'agent',
+          messageId: `${taskRequest.taskId}-result`,
+          taskId: taskRequest.taskId,
+          parts: [{ kind: 'text', text: JSON.stringify(single) }]
+        };
+        onEvent(synthetic);
+      } finally {
+        cleanup();
+      }
+      return {
+        cancel: async () => {
+          // Nothing to cancel in fallback path beyond local cleanup
+          return true;
+        },
+        done: Promise.resolve()
+      };
+    }
+
+    const client = this.clients.get(agentType)!;
+    const message: Message = {
+      kind: 'message',
+      role: 'user',
+      messageId: taskRequest.taskId,
+      taskId: taskRequest.taskId,
+      parts: [
+        { kind: 'text', text: JSON.stringify({ type: taskRequest.type, parameters: taskRequest.parameters, metadata: taskRequest.metadata }) }
+      ],
+    };
+
+    let finished = false;
+    const done = (async () => {
+      try {
+        for await (const event of client.sendMessageStream({ message })) {
+          onEvent(event);
+          // Stop criteria align with ExecutionEventQueue: final status or a message result
+          if (event.kind === 'message') {
+            finished = true;
+            break;
+          }
+          if (event.kind === 'status-update' && (event as TaskStatusUpdateEvent).final) {
+            finished = true;
+            break;
+          }
+        }
+      } catch (err) {
+        log('error', `Streaming error for task ${taskRequest.taskId}:`, err);
+      } finally {
+        cleanup();
+      }
+    })();
+
+    const cancel = async (): Promise<boolean> => {
+      try {
+        if (this.clients.has(agentType)) {
+          await client.cancelTask({ taskId: taskRequest.taskId } as any);
+        }
+        finished = true;
+        cleanup();
+        return true;
+      } catch (err) {
+        log('warn', `Cancel failed for task ${taskRequest.taskId}:`, err);
+        return false;
+      }
+    };
+
+    return { cancel, done };
   }
 
   /**
@@ -121,8 +272,20 @@ export class A2ACommunicationManager {
     if (task) {
       this.pendingTasks.delete(taskId);
 
-      // In a real implementation, this would send a cancel request to the agent
-      // For now, just remove from local tracking
+      // If JSON-RPC transport is enabled and we have a client for the agent type, attempt remote cancel
+      if (this.useA2AClient) {
+        // Find which agent this task likely belongs to by simple heuristic (first matching pending earlier)
+        // Since we don't store reverse index, attempt cancel on all clients; ignore failures.
+        for (const [, client] of this.clients.entries()) {
+          try {
+            await client.cancelTask({ taskId } as any);
+            break;
+          } catch {
+            // try next
+          }
+        }
+      }
+
       return true;
     }
 
@@ -159,6 +322,9 @@ export class A2ACommunicationManager {
     return endpoints as Record<AgentType, string>;
   }
 }
+
+// Re-exported union type to help consumers handle stream events without importing from SDK everywhere
+export type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
 
 /**
  * Message Router for handling A2A protocol messages

@@ -1,5 +1,5 @@
 ---
-applyTo: ["**"]
+applyTo: "**"
 description: "Genkit Multi-Agent System Architecture Blueprint"
 version: "1.0"
 created: "2025-09-25"
@@ -172,7 +172,7 @@ No circular deps; DI via Genkit's plugin/model system.
 
 **Configuration Management**:
 
-- config.ts: ai = genkit({ plugins: [googleAI()], model: ... }); env GEMINI_API_KEY.
+- config.ts: ai = genkit({ plugins: \[googleAI()\], model: ... }); env GEMINI_API_KEY.
 
 - Agent ports via npm scripts (e.g., 41243); dotenvx for env.
 

@@ -1,4 +1,5 @@
 import type { OrchestrationState, ResearchStepExecution, ProgressUpdate, A2AMessage } from '../shared/interfaces.js';
+import type { Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent } from '@a2a-js/sdk';
 import { log } from './logger.js';
 import type { EventEmitter } from 'events';
 
@@ -183,6 +184,70 @@ export class StreamingHandler {
     };
 
     this.updateProgress(researchId, stepExecution, progressUpdate);
+  }
+
+  /**
+   * Handle raw A2A stream events from @a2a-js/sdk client streaming.
+   * Interprets Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent into our ProgressUpdate flow.
+   */
+  handleA2AStreamEvent(event: Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent): void {
+    // Derive researchId from taskId when possible
+    let researchId: string | undefined;
+    let stepId: string | undefined;
+    let status: ResearchStepExecution['status'] = 'running';
+    let messageText = '';
+    let eta = 0;
+    if (event.kind === 'message') {
+      researchId = event.taskId ?? undefined;
+      messageText = event.parts?.find(p => p.kind === 'text')?.text ?? 'Message';
+      status = 'completed';
+    } else if (event.kind === 'task') {
+      researchId = event.id;
+      messageText = `Task state: ${event.status.state}`;
+      status = event.status.state === 'completed' ? 'completed'
+        : event.status.state === 'canceled' ? 'cancelled'
+        : event.status.state === 'failed' ? 'failed'
+        : 'running';
+    } else if (event.kind === 'status-update') {
+      researchId = event.taskId;
+      messageText = event.status.message?.parts?.find(p => p.kind === 'text')?.text ?? 'Status update';
+      status = event.status.state === 'completed' ? 'completed'
+        : event.status.state === 'canceled' ? 'cancelled'
+        : event.status.state === 'failed' ? 'failed'
+        : 'running';
+    } else if (event.kind === 'artifact-update') {
+      researchId = event.taskId;
+      messageText = `Artifact update: ${event.artifact.name ?? event.artifact.artifactId}`;
+      status = 'running';
+    }
+
+    if (!researchId) {
+      return;
+    }
+    const session = this.activeStreams.get(researchId);
+    if (!session) {
+      return;
+    }
+
+    const progressUpdate: ProgressUpdate = {
+      timestamp: new Date(),
+      message: messageText,
+      currentActivity: 'Streaming update',
+      estimatedTimeRemaining: eta
+    };
+
+    const stepExecution: ResearchStepExecution = {
+      stepId: stepId ?? `${researchId}-stream`,
+      agentId: 'stream',
+      status,
+      progressUpdates: [progressUpdate],
+      retryCount: 0
+    };
+    this.updateProgress(researchId, stepExecution, progressUpdate);
+
+    if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+      this.endStream(researchId, status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'cancelled');
+    }
   }
 
   /**

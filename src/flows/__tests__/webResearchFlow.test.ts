@@ -49,4 +49,10 @@ describe('webResearchFlow', () => {
     expect(result.topic).toBe('AI');
     expect(result.findings.length).toBe(1);
   });
+
+  it('throws UserFacingError on schema parse failure', async () => {
+    const badOutput = { nope: true } as unknown;
+    vi.mocked(ai.prompt).mockReturnValue((async () => ({ text: JSON.stringify(badOutput), output: badOutput })) as unknown as ReturnType<typeof ai.prompt>);
+    await expect(webResearchFlow({ query: 'bad' })).rejects.toThrowError('Schema validation failed for webResearchFlow output');
+  });
 });

@@ -2,7 +2,8 @@
   "include": [
     ".eslintrc.js",
     "src/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "eslint.config.js"
   ],
   "compilerOptions": {
     "strict": true,

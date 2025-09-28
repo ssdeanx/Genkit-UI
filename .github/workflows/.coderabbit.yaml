@@ -1,0 +1,94 @@
+# Enterprise configuration with comprehensive settings
+language: "en-US"
+tone_instructions: "Be thorough and focus on security and maintainability"
+early_access: true
+reviews:
+  profile: "assertive"
+  high_level_summary: true
+  suggested_reviewers: true
+  auto_assign_reviewers: true
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+  high_level_summary: true
+  poem: true
+  suggested_reviewers: true
+  auto_assign_reviewers: true
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    labels:
+      - "feature"
+      - "bugfix"
+      - "!wip"
+  path_filters:
+    - "!node_modules/**"
+    - "!dist/**"
+    - "!build/**"
+    - "!lib/**"
+    - "src/**"
+    - "tests/**"
+    - "scripts/**"
+  tools:
+    # Security tools
+    gitleaks:
+      enabled: true
+    semgrep:
+      enabled: true
+    checkov:
+      enabled: true
+
+    # Language-specific linters
+    eslint:
+      enabled: true
+
+    # Infrastructure
+    hadolint:
+      enabled: true
+    yamllint:
+      enabled: true
+    actionlint:
+      enabled: true
+
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+
+  pre_merge_checks:
+    title:
+      mode: "error"
+      requirements: "Title should be concise and descriptive"
+    description:
+      mode: "warning"
+    docstrings:
+      mode: "warning"
+      threshold: 80
+
+chat:
+  auto_reply: true
+  integrations:
+    linear:
+      usage: "enabled"
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/.cursorrules"
+      - ".github/copilot-instructions.md"
+      - "**/CODE_OF_CONDUCT.md"
+      - "**/CONTRIBUTING.md"
+      - ".github/instructions/*.md"
+      - "**/README.md"
+      - "**/AGENTS.md"
+      - "memory-bank/**/*.md"
+  learnings:
+    scope: "global"
+  issues:
+    scope: "global"

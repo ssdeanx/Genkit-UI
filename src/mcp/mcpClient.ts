@@ -1,7 +1,9 @@
 import { googleAI } from '@genkit-ai/google-genai';
 import { createMcpHost } from '@genkit-ai/mcp';
 import { genkit } from 'genkit';
+import { flowlogger } from '../logger.js';
 
+flowlogger.info('Setting up MCP client host...');
 const mcpHost = createMcpHost({
   name: 'myMcpClients', // A name for the host plugin itself
   mcpServers: {
@@ -12,7 +14,7 @@ const mcpHost = createMcpHost({
     },
     memory: {
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-memory'],
+      args: ['-y', ''],
     },
   },
 });
@@ -30,7 +32,7 @@ const ai = genkit({
     resources: await mcpHost.getActiveResources(ai),
   });
 
-  console.log(text);
+  flowlogger.info('MCP client host setup complete.');
 
   await mcpHost.close();
 })();

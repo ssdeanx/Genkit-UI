@@ -2,6 +2,7 @@
 model: googleai/gemini-2.5-flash
 config:
   temperature: 0.3
+tools: []
 input:
   schema:
     query: string

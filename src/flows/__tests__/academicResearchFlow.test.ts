@@ -39,4 +39,10 @@ describe('academicResearchFlow', () => {
     const res = await academicResearchFlow({ query: 'q' });
     expect(res.topic).toBe('AI');
   });
+
+  it('throws UserFacingError on schema parse failure', async () => {
+    const bad = { nope: true } as unknown;
+    vi.mocked(ai.prompt).mockReturnValue((async () => ({ text: JSON.stringify(bad), output: bad })) as unknown as ReturnType<typeof ai.prompt>);
+    await expect(academicResearchFlow({ query: 'q' })).rejects.toThrowError('Schema validation failed for academicResearchFlow output');
+  });
 });

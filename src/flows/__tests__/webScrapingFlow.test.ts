@@ -21,4 +21,9 @@ describe('webScrapingFlow', () => {
   const res = await webScrapingFlow(input);
     expect(res.success).toBe(true);
   });
+
+  it('throws UserFacingError when tool returns invalid envelope', async () => {
+    vi.mocked(tool.webScrapingTool).mockResolvedValue({ nope: true } as unknown as WebScrapingOutput);
+    await expect(webScrapingFlow({ operation: 'scrapeUrl', url: 'https://ex.com' } as WebScrapingInput)).rejects.toThrowError('Schema validation failed for webScrapingFlow output');
+  });
 });

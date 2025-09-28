@@ -6,6 +6,7 @@ config:
   maxOutputTokens: 4000
   structuredOutput:
     enabled: true
+tools: [calculatorTool]
 input:
   schema: DataAnalysisInput
 output:

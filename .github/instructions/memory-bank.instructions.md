@@ -1,5 +1,20 @@
 ---
 applyTo: '**'
+description: "Memory Bank instructions for AI"
+version: "1.1"
+created: "2025-09-27"
+updated: "2025-09-27"
+tags:
+  - "memory-bank"
+  - "ai"
+  - "documentation"
+  - "memory-management"
+  - "knowledge-retrieval"
+  - "context-awareness"
+  - "user-profiles"
+  - "personalization"
+  - "data-privacy"
+  - "user-consent"
 ---
 Coding standards, domain knowledge, and preferences that AI should follow.
 
@@ -16,48 +31,64 @@ flowchart TD
     PB[projectbrief.md] --> PC[productContext.md]
     PB --> SP[systemPatterns.md]
     PB --> TC[techContext.md]
-    
+
     PC --> AC[activeContext.md]
     SP --> AC
     TC --> AC
-    
+
     AC --> P[progress.md]
     AC --> TF[tasks/ folder]
 ```
 
 ### Core Files (Required)
+
 1. `projectbrief.md`
    - Foundation document that shapes all other files
    - Created at project start if it doesn't exist
    - Defines core requirements and goals
    - Source of truth for project scope
+   - Includes:
+     - Project purpose
+     - Success metrics
+     - High-level features
+     - Constraints and assumptions
 
 2. `productContext.md`
    - Why this project exists
    - Problems it solves
    - How it should work
    - User experience goals
+   - Target audience and personas
+   - Key features and use cases
 
 3. `activeContext.md`
    - Current work focus
    - Recent changes
    - Next steps
    - Active decisions and considerations
+   - Links to relevant tasks
+   - Reflects the present state of the project
 
 4. `systemPatterns.md`
    - System architecture
    - Key technical decisions
    - Design patterns in use
    - Component relationships
+   - Data flow diagrams
+   - Deployment diagrams
 
 5. `techContext.md`
    - Technologies used
    - Development setup
    - Technical constraints
    - Dependencies
+   - Versioning
 
 6. `progress.md`
    - What works
+   - What doesn't work
+   - Lessons learned
+   - Best practices
    - What's left to build
    - Current status
    - Known issues
@@ -67,32 +98,40 @@ flowchart TD
    - Each task has its own dedicated file with format `TASKID-taskname.md`
    - Includes task index file (`_index.md`) listing all tasks with their statuses
    - Preserves complete thought process and history for each task
+   - Tracks progress in detail
+   - Enables resuming work seamlessly after resets
 
 ### Additional Context
+
 Create additional files/folders within memory-bank/ when they help organize:
+
 - Complex feature documentation
 - Integration specifications
 - API documentation
 - Testing strategies
 - Deployment procedures
+- User guides
+- Other relevant contexts
 
 ## Core Workflows
 
 ### Plan Mode
+
 ```mermaid
 flowchart TD
     Start[Start] --> ReadFiles[Read Memory Bank]
     ReadFiles --> CheckFiles{Files Complete?}
-    
+
     CheckFiles -->|No| Plan[Create Plan]
     Plan --> Document[Document in Chat]
-    
+
     CheckFiles -->|Yes| Verify[Verify Context]
     Verify --> Strategy[Develop Strategy]
     Strategy --> Present[Present Approach]
 ```
 
 ### Act Mode
+
 ```mermaid
 flowchart TD
     Start[Start] --> Context[Check Memory Bank]
@@ -103,13 +142,14 @@ flowchart TD
 ```
 
 ### Task Management
+
 ```mermaid
 flowchart TD
     Start[New Task] --> NewFile[Create Task File in tasks/ folder]
     NewFile --> Think[Document Thought Process]
     Think --> Plan[Create Implementation Plan]
     Plan --> Index[Update _index.md]
-    
+
     Execute[Execute Task] --> Update[Add Progress Log Entry]
     Update --> StatusChange[Update Task Status]
     StatusChange --> IndexUpdate[Update _index.md]
@@ -121,24 +161,27 @@ flowchart TD
 ## Documentation Updates
 
 Memory Bank updates occur when:
+
 1. Discovering new project patterns
 2. After implementing significant changes
 3. When user requests with **update memory bank** (MUST review ALL files)
 4. When context needs clarification
+5. When instructions need refinement
+6. When tasks progress
 
 ```mermaid
 flowchart TD
     Start[Update Process]
-    
+
     subgraph Process
         P1[Review ALL Files]
         P2[Document Current State]
         P3[Clarify Next Steps]
         P4[Update instructions]
-        
+
         P1 --> P2 --> P3 --> P4
     end
-    
+
     Start --> Process
 ```
 
@@ -151,30 +194,33 @@ The instructions files are my learning journal for each project. It captures imp
 ```mermaid
 flowchart TD
     Start{Discover New Pattern}
-    
+
     subgraph Learn [Learning Process]
         D1[Identify Pattern]
         D2[Validate with User]
         D3[Document in instructions]
     end
-    
+
     subgraph Apply [Usage]
         A1[Read instructions]
         A2[Apply Learned Patterns]
         A3[Improve Future Work]
     end
-    
+
     Start --> Learn
     Learn --> Apply
 ```
 
 ### What to Capture
+
 - Critical implementation paths
 - User preferences and workflow
 - Project-specific patterns
 - Known challenges
 - Evolution of project decisions
 - Tool usage patterns
+- Best practices for the project
+- Anything that helps me understand the project better
 
 The format is flexible - focus on capturing valuable insights that help me work more effectively with you and the project. Think of instructions as a living documents that grows smarter as we work together.
 
@@ -216,9 +262,11 @@ Each task file follows this format:
 ```markdown
 # [Task ID] - [Task Name]
 
-**Status:** [Pending/In Progress/Completed/Abandoned]  
-**Added:** [Date Added]  
+**Status:** [Pending/In Progress/Completed/Abandoned]
+**Added:** [Date Added]
 **Updated:** [Date Last Updated]
+**Notes:** [Any relevant notes or tags]
+
 
 ## Original Request
 [The original task description as provided by the user]
@@ -230,6 +278,8 @@ Each task file follows this format:
 - [Step 1]
 - [Step 2]
 - [Step 3]
+- [Step 4]
+- [Step 5]
 
 ## Progress Tracking
 
@@ -241,15 +291,19 @@ Each task file follows this format:
 | 1.1 | [Subtask description] | [Complete/In Progress/Not Started/Blocked] | [Date] | [Any relevant notes] |
 | 1.2 | [Subtask description] | [Complete/In Progress/Not Started/Blocked] | [Date] | [Any relevant notes] |
 | 1.3 | [Subtask description] | [Complete/In Progress/Not Started/Blocked] | [Date] | [Any relevant notes] |
+| 1.4 | [Subtask description] | [Complete/In Progress/Not Started/Blocked] | [Date] | [Any relevant notes] |
+| 1.5 | [Subtask description] | [Complete/In Progress/Not Started/Blocked] | [Date] | [Any relevant notes] |
 
 ## Progress Log
-### [Date]
+### [Date] [Time]
 - Updated subtask 1.1 status to Complete
 - Started work on subtask 1.2
 - Encountered issue with [specific problem]
 - Made decision to [approach/solution]
+- Updated overall task status to In Progress - 20%
+- Updated _index.md to reflect current status
 
-### [Date]
+### [Date] [Time]
 - [Additional updates as work progresses]
 ```
 
@@ -265,20 +319,23 @@ These detailed progress updates ensure that after memory resets, I can quickly u
 ### Task Commands
 
 When you request **add task** or use the command **create task**, I will:
+
 1. Create a new task file with a unique Task ID in the tasks/ folder
 2. Document our thought process about the approach
 3. Develop an implementation plan
 4. Set an initial status
 5. Update the _index.md file to include the new task
 
-For existing tasks, the command **update task [ID]** will prompt me to:
-1. Open the specific task file 
+For existing tasks, the command **update task \[ID]** will prompt me to:
+
+1. Open the specific task file
 2. Add a new progress log entry with today's date
 3. Update the task status if needed
 4. Update the _index.md file to reflect any status changes
 5. Integrate any new decisions into the thought process
 
-To view tasks, the command **show tasks [filter]** will:
+To view tasks, the command **show tasks \[filter]** will:
+
 1. Display a filtered list of tasks based on the specified criteria
 2. Valid filters include:
    - **all** - Show all tasks regardless of status
@@ -287,8 +344,8 @@ To view tasks, the command **show tasks [filter]** will:
    - **completed** - Show only tasks with "Completed" status
    - **blocked** - Show only tasks with "Blocked" status
    - **recent** - Show tasks updated in the last week
-   - **tag:[tagname]** - Show tasks with a specific tag
-   - **priority:[level]** - Show tasks with specified priority level
+   - **tag:\[tagname]** - Show tasks with a specific tag
+   - **priority:\[level]** - Show tasks with specified priority level
 3. The output will include:
    - Task ID and name
    - Current status and completion percentage

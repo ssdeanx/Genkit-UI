@@ -4,6 +4,7 @@ config:
   topK: 40
   topP: 0.9
   maxOutputTokens: 1200
+tools: []
 input:
   schema:
     content: string

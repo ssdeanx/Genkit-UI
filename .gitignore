@@ -34,3 +34,5 @@ chroma
 .specify/**/*.md
 .specify/memory/*.md
 .specify/templates/*.md
+
+composio.md

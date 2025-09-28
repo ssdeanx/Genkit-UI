@@ -36,7 +36,9 @@
     "tests/**/*.ts",
     "src/**/*__tests__/*.ts",
     "vitest.setup.ts",
-    "functions/.eslintrc.js"
+    "functions/.eslintrc.js",
+    "functions/*",
+    "functions/eslint.config.js"
   ],
   "exclude": [
     "node_modules",

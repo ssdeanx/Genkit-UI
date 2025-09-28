@@ -1,7 +1,7 @@
 ---
-applyTo: ["**/*.ts", "**/*.tsx"]
+applyTo: "**"
 description: "General coding standards for TypeScript and React code."
-tags: ["typescript", "react", "coding-standards"]
+tags: "typescript", "react", "coding-standards"
 version: "1.0.1"
 last_updated: "2025-09-24T19:13:49Z"
 status: "stable"
@@ -12,6 +12,7 @@ status: "stable"
 Apply the general coding guidelines to all code.
 
 ## TypeScript Guidelines
+
 - Use TypeScript for all new code
 - Follow functional programming principles where possible
 - Use interfaces or types for data structures and type definitions
@@ -24,6 +25,7 @@ Apply the general coding guidelines to all code.
 - Use ESLint and Prettier for code formatting and linting
 
 ## General Best Practices
+
 - Write clear, descriptive comments and JSDoc for functions and classes
 - Use meaningful variable and function names
 - Adhere to the DRY (Don't Repeat Yourself) principle

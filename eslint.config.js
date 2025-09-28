@@ -2,11 +2,15 @@ import js from '@eslint/js'
 import tseslint from '@typescript-eslint/eslint-plugin'
 import tsparser from '@typescript-eslint/parser'
 import prettierConfig from 'eslint-config-prettier'
+import googleConfig from "eslint-config-google";
+import importPlugin from "eslint-plugin-import";
 //import reactPlugin from 'eslint-plugin-react'
 
 
 
 export default [
+  // Apply Google style config so tools won't miss eslint-config-google
+  googleConfig,
   js.configs.recommended,
   prettierConfig,
   {
@@ -14,6 +18,7 @@ export default [
     plugins: {
 //      react: reactPlugin,
       '@typescript-eslint': tseslint,
+      import: importPlugin,
     },
     languageOptions: {
       parser: tsparser,
@@ -97,7 +102,9 @@ export default [
       '.github/prompts/*.md',
       '.github/instructions/*.md',
       '.github/workflows/*.yml',
-      '.github/*.md'
+      '.github/*.md',
+      'memory-bank/**',
+      'tasks/**'
     ]
   }
 ]

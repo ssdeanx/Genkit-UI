@@ -1,7 +1,5 @@
-/* eslint-disable no-console */
-
 import { startFlowServer } from '@genkit-ai/express';
-
+import { flowlogger } from './logger.js';
 // Import flows exported from src/index.ts
 import {
   recipeGeneratorFlow,
@@ -43,14 +41,14 @@ async function main() {
     cors: { origin: '*' },
   });
 
-  console.log(`[FlowServer] Flow server started on http://localhost:${PORT}`);
+  flowlogger.info(`[FlowServer] Flow server started on http://localhost:${PORT}`);
   const flowNames = flows
     .map((f) => ((f as unknown as { definition?: { name?: string } }).definition?.name) ?? (f as unknown as { name?: string }).name ?? 'unknown')
     .join(', ');
-  console.log(`[FlowServer] Registered flows: ${flowNames}`);
+  flowlogger.info(`[FlowServer] Registered flows: ${flowNames}`);
 }
 
 main().catch((err) => {
-  console.error('[FlowServer] Failed to start flow server:', err);
+  flowlogger.error('[FlowServer] Failed to start flow server:', err);
   process.exit(1);
 });
