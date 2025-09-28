@@ -24,7 +24,7 @@ import type {
   OrchestrationDecision
 } from "../shared/interfaces.js";
 import { TaskDelegator } from "./task-delegator.js";
-import { A2ACommunicationManager } from "./a2a-communication.js";
+import { A2ACommunicationManager, type A2AStreamEvent } from "./a2a-communication.js";
 import { log } from './logger.js';
 
 /* use centralized logger */
@@ -57,6 +57,18 @@ class OrchestratorAgentExecutor implements AgentExecutor {
   constructor(taskDelegator: TaskDelegator, a2aManager: A2ACommunicationManager) {
     this.taskDelegator = taskDelegator;
     this.a2aManager = a2aManager;
+  }
+
+  /**
+   * Optional: bridge streamed child-agent events into our event bus if needed
+   */
+  private handleChildAgentStreamEvent(event: A2AStreamEvent, _eventBus: ExecutionEventBus): void {
+    try {
+      // For now, just log; wiring into eventBus can be added safely later
+      log('log', '[stream-event]', event.kind);
+    } catch (e) {
+      log('warn', 'Failed to handle child agent stream event', e);
+    }
   }
 
   public cancelTask = async (
@@ -560,7 +572,9 @@ class OrchestratorAgentExecutor implements AgentExecutor {
 // --- Server Setup ---
 
 const orchestratorAgentCard: AgentCard = {
-  protocolVersion: '1.0',
+  // A2A protocol version must match the SDK major/minor we target
+  // Aligning to @a2a-js/sdk v0.3.x
+  protocolVersion: '0.3.0',
   name: 'Research Orchestrator Agent',
   description:
     'An agent that coordinates multi-agent research execution, manages research state, and optimizes task distribution across specialized research agents.',

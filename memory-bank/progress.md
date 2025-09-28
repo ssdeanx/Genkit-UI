@@ -19,4 +19,4 @@ Known issues / risks
 
 Recent updates
 
-- 2025-09-27: Initialized Memory Bank and scaffolding files
+- 2025-09-28: Orchestrator AgentCard.protocolVersion aligned to 0.3.0; shared AgentCard type aliased to SDK; optional A2AClient path added to comms manager; tests run green (83/83); flows at 100% coverage.

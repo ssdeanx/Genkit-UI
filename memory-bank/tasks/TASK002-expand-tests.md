@@ -11,7 +11,7 @@ Increase unit test coverage for flows and tools; add mocks for external APIs.
 Focus on flows in `src/flows/` and tools in `src/tools/`. Mock `ai` and external libs with Vitest. Use existing `weatherFlow.test.ts` as a pattern.
 
 ## Implementation Plan
- 
+
 - Identify flows/tools lacking tests and list cases
 - Create tests under `src/**/__tests__` or alongside flows
 - Mock external APIs (wikipedia, weather) and `ai`
@@ -21,7 +21,7 @@ Focus on flows in `src/flows/` and tools in `src/tools/`. Mock `ai` and external
 Overall Status: In Progress - 10%
 
 ### Subtasks
- 
+
 | ID | Description | Status | Updated | Notes |
 |----|-------------|--------|---------|-------|
 | 2.1 | Audit test gaps | In Progress | 2025-09-27 |  |
@@ -30,5 +30,5 @@ Overall Status: In Progress - 10%
 
 ## Progress Log
 ### 2025-09-27
- 
+
 - Collected patterns from existing tests and planned coverage

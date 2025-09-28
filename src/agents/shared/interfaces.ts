@@ -168,20 +168,9 @@ export interface ProgressUpdate {
 }
 
 // A2A Protocol interfaces
-export interface AgentCard {
-  name: string;
-  description: string;
-  version: string;
-  capabilities: string[];
-  supportedTasks: TaskType[];
-  endpoints: {
-    status: string;
-    execute: string;
-    cancel?: string;
-  };
-  protocolVersion: string;
-  metadata: Record<string, unknown>;
-}
+// Prefer the AgentCard type from @a2a-js/sdk to stay aligned with protocol changes.
+// We expose a local alias so existing imports continue to work without churn.
+export type AgentCard = import('@a2a-js/sdk').AgentCard;
 
 export interface TaskType {
   name: string;
