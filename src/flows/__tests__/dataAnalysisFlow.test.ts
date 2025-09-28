@@ -36,4 +36,10 @@ describe('dataAnalysisFlow', () => {
     expect(res.statisticalAnalysis.methodology).toBe('t-test');
     expect(res.quantitativeInsights.primaryConclusions.length).toBe(1);
   });
+
+  it('throws UserFacingError on invalid schema output', async () => {
+    const bad = { nope: true } as unknown;
+    vi.mocked(ai.prompt).mockReturnValue((async () => ({ text: JSON.stringify(bad), output: bad })) as unknown as ReturnType<typeof ai.prompt>);
+    await expect(dataAnalysisFlow({ analysisType: 'summary' } as DataAnalysisInput)).rejects.toThrowError('Schema validation failed for dataAnalysisFlow output');
+  });
 });

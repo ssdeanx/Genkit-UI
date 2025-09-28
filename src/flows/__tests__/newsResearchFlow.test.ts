@@ -71,4 +71,10 @@ describe('newsResearchFlow', () => {
     const res = await newsResearchFlow({ query: 'topic' });
     expect(res.metadata.totalArticles).toBe(1);
   });
+
+  it('throws UserFacingError on invalid schema output', async () => {
+    const bad = { wrong: 'shape' } as unknown;
+    vi.mocked(ai.prompt).mockReturnValue((async () => ({ text: JSON.stringify(bad), output: bad })) as unknown as ReturnType<typeof ai.prompt>);
+    await expect(newsResearchFlow({ query: 'topic' })).rejects.toThrowError('Schema validation failed for newsResearchFlow output');
+  });
 });

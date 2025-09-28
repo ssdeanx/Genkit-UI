@@ -27,4 +27,9 @@ describe('recipeGeneratorFlow', () => {
     expect(res.title).toBe('Pasta');
     expect(res.ingredients.length).toBe(1);
   });
+
+  it('throws when output is missing', async () => {
+    vi.mocked(ai.generate).mockResolvedValue({ output: undefined } as unknown as Awaited<ReturnType<typeof ai.generate>>);
+    await expect(recipeGeneratorFlow({ ingredient: 'rice' } as { ingredient: string })).rejects.toThrowError('Failed to generate recipe');
+  });
 });

@@ -29,4 +29,10 @@ describe('planningFlow', () => {
     expect(res.title).toBe('Plan');
     expect(res.steps.length).toBe(1);
   });
+
+  it('throws Error when planning prompt returns invalid plan', async () => {
+    const bad = { nope: true } as unknown;
+    vi.mocked(ai.prompt).mockReturnValue((async () => ({ text: JSON.stringify(bad), output: bad })) as unknown as ReturnType<typeof ai.prompt>);
+    await expect(planningFlow({ query: 'q' })).rejects.toThrowError('Planning prompt returned invalid ResearchPlan');
+  });
 });
