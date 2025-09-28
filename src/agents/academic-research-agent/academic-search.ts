@@ -28,7 +28,7 @@ export class AcademicSearchUtils {
         api_key: this.serpApiKey,
         engine: 'google_scholar',
         num: options.limit ?? 10,
-        ...this.buildScholarParams(options)
+        ...this.buildScholarParams(options, query)
       };
 
       console.log(`Performing Google Scholar search for: "${query}"`);
@@ -170,8 +170,9 @@ export class AcademicSearchUtils {
   /**
    * Build Google Scholar search parameters
    */
-  private buildScholarParams(options: ScholarSearchOptions): Record<string, string | number> {
+  private buildScholarParams(options: ScholarSearchOptions, baseQuery: string): Record<string, string | number> {
     const params: Record<string, string | number> = {};
+    let q = baseQuery;
 
     if (options.yearFrom) {
       params.as_ylo = options.yearFrom;
@@ -182,14 +183,14 @@ export class AcademicSearchUtils {
     }
 
     if (options.author) {
-      params.q = (params.q as string || '') + ` author:"${options.author}"`;
+      q += ` author:"${options.author}"`;
     }
 
     if (options.venue) {
-      params.q = (params.q as string || '') + ` source:"${options.venue}"`;
+      q += ` source:"${options.venue}"`;
     }
 
-    return params;
+    return { ...params, q };
   }
 
   /**

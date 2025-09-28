@@ -14,13 +14,29 @@ export class A2ACommunicationManager {
   private useA2AClient: boolean;
   private useStreaming: boolean;
   private clients: Map<AgentType, A2AClient> = new Map();
+  private clientFactory?: (url: string) => A2AClient;
 
-  constructor() {
+  constructor(options?: {
+    endpoints?: Partial<Record<AgentType, string>>;
+    useA2AClient?: boolean;
+    useStreaming?: boolean;
+    clientFactory?: (url: string) => A2AClient;
+  }) {
     // Initialize agent endpoints from environment or configuration
     this.initializeAgentEndpoints();
+    if (options?.endpoints) {
+      for (const [k, v] of Object.entries(options.endpoints)) {
+        if (v) {
+          this.agentEndpoints.set(k as AgentType, v);
+        }
+      }
+    }
     // Allow opting into proper A2A JSON-RPC transport progressively
-    this.useA2AClient = (process.env.USE_A2A_CLIENT ?? 'false').toLowerCase() === 'true';
-    this.useStreaming = (process.env.USE_A2A_STREAMING ?? 'false').toLowerCase() === 'true';
+    this.useA2AClient = options?.useA2AClient ?? ((process.env.USE_A2A_CLIENT ?? 'false').toLowerCase() === 'true');
+    this.useStreaming = options?.useStreaming ?? ((process.env.USE_A2A_STREAMING ?? 'false').toLowerCase() === 'true');
+    if (options?.clientFactory) {
+      this.clientFactory = options.clientFactory;
+    }
     if (this.useA2AClient) {
       this.bootstrapClients();
     }
@@ -39,7 +55,7 @@ export class A2ACommunicationManager {
     for (const [agentType, endpoint] of this.agentEndpoints.entries()) {
       if (endpoint && endpoint.trim() !== '') {
         try {
-          const client = new A2AClient(endpoint);
+          const client = this.clientFactory ? this.clientFactory(endpoint) : new A2AClient(endpoint);
           this.clients.set(agentType, client);
         } catch {
           // Fallback silently; fetch path will be used

@@ -25,7 +25,7 @@ export class WebSearchUtils {
         engine: 'google',
         num: options.limit ?? 10,
         start: options.offset ?? 0,
-        ...this.buildAdvancedParams(options)
+        ...this.buildAdvancedParams(options, query)
       };
 
       console.log(`Performing web search for: "${query}"`);
@@ -71,7 +71,7 @@ export class WebSearchUtils {
         api_key: this.apiKey,
         engine: 'google_scholar',
         num: options.limit ?? 10,
-        ...this.buildScholarParams(options)
+        ...this.buildScholarParams(options, query)
       };
 
       console.log(`Performing scholar search for: "${query}"`);
@@ -87,8 +87,9 @@ export class WebSearchUtils {
   /**
    * Build advanced search parameters
    */
-  private buildAdvancedParams(options: SearchOptions): Record<string, any> {
+  private buildAdvancedParams(options: SearchOptions, baseQuery: string): Record<string, any> {
     const params: Record<string, any> = {};
+    let q = baseQuery;
 
     if (options.timeRange) {
       // Convert time range to SerpAPI format
@@ -101,24 +102,24 @@ export class WebSearchUtils {
     }
 
     if (options.site) {
-      params.q += ` site:${options.site}`;
+      q += ` site:${options.site}`;
     }
 
     if (options.excludeSites) {
       options.excludeSites.forEach(site => {
-        params.q += ` -site:${site}`;
+        q += ` -site:${site}`;
       });
     }
 
     if (options.fileType) {
-      params.q += ` filetype:${options.fileType}`;
+      q += ` filetype:${options.fileType}`;
     }
 
     if (options.language) {
       params.hl = options.language;
     }
 
-    return params;
+    return { ...params, q };
   }
 
   /**
@@ -146,8 +147,9 @@ export class WebSearchUtils {
   /**
    * Build scholar search parameters
    */
-  private buildScholarParams(options: ScholarSearchOptions): Record<string, any> {
+  private buildScholarParams(options: ScholarSearchOptions, baseQuery: string): Record<string, any> {
     const params: Record<string, any> = {};
+    let q = baseQuery;
 
     if (options.yearFrom) {
       params.as_ylo = options.yearFrom;
@@ -158,10 +160,10 @@ export class WebSearchUtils {
     }
 
     if (options.author) {
-      params.q += ` author:"${options.author}"`;
+      q += ` author:"${options.author}"`;
     }
 
-    return params;
+    return { ...params, q };
   }
 
   /**

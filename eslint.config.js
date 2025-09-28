@@ -4,7 +4,6 @@ import tsparser from '@typescript-eslint/parser'
 import prettierConfig from 'eslint-config-prettier'
 import googleConfig from "eslint-config-google";
 import importPlugin from "eslint-plugin-import";
-//import reactPlugin from 'eslint-plugin-react'
 
 
 
@@ -16,7 +15,6 @@ export default [
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
     plugins: {
-//      react: reactPlugin,
       '@typescript-eslint': tseslint,
       import: importPlugin,
     },
@@ -31,7 +29,6 @@ export default [
     settings: {
     },
     rules: {
-//      ...reactPlugin.configs.recommended.rules,
       // Standard style guide rules
       'no-unused-vars': 'warn', // Turn off base rule
       '@typescript-eslint/no-unused-vars': 'warn',
@@ -104,7 +101,10 @@ export default [
       '.github/workflows/*.yml',
       '.github/*.md',
       'memory-bank/**',
-      'tasks/**'
+      'tasks/**',
+      '.gemini/**',
+      '.github/workflows/*.yml',
+      'scripts/**',
     ]
   }
 ]

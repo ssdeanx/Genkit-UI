@@ -2,8 +2,7 @@
 
 ## In Progress
 
-- [TASK002](./TASK002-expand-tests.md) Expand flow & tool tests — Writing unit tests and mocks
-- [TASK003](./TASK003-a2a-integration-tests.md) A2A integration tests — Started fallback streaming test; next: mock stream
+- [TASK002](./TASK002-expand-tests.md) Expand flow & tool tests — Added planning-agent unit tests; continue increasing tool coverage
 
 ## Pending
 
@@ -12,6 +11,8 @@
 ## Completed
 
 - [TASK001](./TASK001-setup-memory-bank.md) Setup Memory Bank — Completed on 2025-09-27
+- [TASK003](./TASK003-a2a-integration-tests.md) A2A integration tests — Completed on 2025-09-28
+- [TASK005](./TASK005-research-agents-tests.md) Research agents tests — Completed on 2025-09-28
 
 ## Abandoned
 

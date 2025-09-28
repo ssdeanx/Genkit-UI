@@ -7,7 +7,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./config:/config
+      - ./src/config:/config # Adjust path here
     command: [ "toolbox", "--tools-file", "/config/tools.yaml", "--address", "0.0.0.0"]
     depends_on:
       db:
@@ -25,10 +25,10 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./db:/var/lib/postgresql/data
+      - ./src/db:/var/lib/postgresql/data # Points to `db` inside `src`
       # This file can be used to bootstrap your schema if needed.
       # See "initialization scripts" on https://hub.docker.com/_/postgres/ for more info
-      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./src/config/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U toolbox_user -d toolbox_db"]
       interval: 10s
@@ -53,3 +53,5 @@ services:
 networks:
   tool-network:
     driver: bridge
+volumes:
+  redis-data:

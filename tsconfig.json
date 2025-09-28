@@ -47,7 +47,10 @@
     "lib",
     "scripts",
     "templates",
-    "/functions/node_modules",
-    "/functions/lib"
+    "functions/node_modules",
+    "functions/lib",
+    ".github/instructions/*.md",
+    ".github/instructions/*.md",
+    ".github/workflows/*.yml",
   ]
 }
