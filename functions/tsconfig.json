@@ -1,7 +1,12 @@
 {
   "compileOnSave": true,
   "include": [
-    "src"
+    "src",
+    ".eslintrc.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "lib"
   ],
   "compilerOptions": {
     "module": "NodeNext",

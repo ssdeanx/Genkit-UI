@@ -1,8 +1,9 @@
+import type { Flow } from '@genkit-ai/core';
 import { ai } from '../config.js';
 import { UserFacingError } from '../errors/UserFacingError.js';
-import { NewsResearchInputSchema, NewsResearchOutputSchema } from '../schemas/newsResearchSchema.js';
+import { NewsResearchInputSchema, NewsResearchOutputSchema } from '../schemas/index.js';
 
-export const newsResearchFlow = ai.defineFlow(
+export const newsResearchFlow: Flow<typeof NewsResearchInputSchema, typeof NewsResearchOutputSchema> = ai.defineFlow(
   {
     name: 'newsResearchFlow',
     inputSchema: NewsResearchInputSchema,

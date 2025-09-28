@@ -1,4 +1,11 @@
-import type { ResearchStepResult, SourceCitation, OrchestrationState, ResearchFinding, ResearchResult } from '../shared/interfaces.js';
+import type {
+  ResearchStepResult,
+  SourceCitation,
+  OrchestrationState,
+  ResearchFinding,
+  ResearchResult,
+  ResearchPlan // added
+} from '../shared/interfaces.js';
 
 /**
  * Result Aggregation System for the Orchestrator Agent
@@ -53,7 +60,7 @@ export class ResultAggregator {
     const allSources: SourceCitation[] = [];
 
     for (const result of results) {
-      if (result.sources && Array.isArray(result.sources)) {
+      if (Array.isArray(result.sources)) {
         allSources.push(...result.sources);
       }
     }
@@ -136,7 +143,7 @@ export class ResultAggregator {
     claim: string;
     evidence: string;
     confidence: number;
-    sourceIndices: number[];
+    sourceUrls: string[]; // changed from sourceIndices to concrete URLs
     category: 'factual' | 'analytical' | 'speculative';
     stepId: string;
   }> {
@@ -144,36 +151,136 @@ export class ResultAggregator {
       claim: string;
       evidence: string;
       confidence: number;
-      sourceIndices: number[];
+      sourceUrls: string[];
       category: 'factual' | 'analytical' | 'speculative';
       stepId: string;
     }> = [];
 
     for (const result of results) {
       // Extract structured findings from result data
-      if (result.data && typeof result.data === 'object') {
-        // Narrow to an indexable type so TypeScript allows property access
-        const data = result.data as Record<string, any>;
+      if (typeof result.data === 'object' && result.data !== null) {
+        // Narrow to a safe, unknown-based type instead of 'any'
+        const data = result.data as Record<string, unknown>;
 
         if (Array.isArray(data.findings)) {
-          data.findings.forEach((finding: any, index: number) => {
+          const findingsArray = data.findings as unknown[];
+          findingsArray.forEach((rawFinding: unknown, index: number) => {
+            if (!this.isRecord(rawFinding)) {
+              return;
+            }
+
+            const claim =
+              this.asString(rawFinding['claim']) ??
+              this.asString(rawFinding['statement']) ??
+              `Finding ${index + 1}`;
+
+            const evidence =
+              this.asString(rawFinding['evidence']) ??
+              this.asString(rawFinding['explanation']) ??
+              '';
+
+            // Compute confidence safely: prefer explicit numeric field, fallback to result.qualityScore if numeric, otherwise 0.
+            const rawConfidence = this.asNumber(rawFinding['confidence']);
+            const confidence =
+              rawConfidence ?? (typeof result.qualityScore === 'number' ? result.qualityScore : 0);
+
+            // Resolve source URLs for the finding:
+            const sourceUrls: string[] = [];
+
+            // 1) If the finding lists numeric indices, map them to the result.sources URLs (guarded)
+            const idxs = this.asNumberArray(rawFinding['sourceIndices']);
+            if (idxs && Array.isArray(result.sources)) {
+              idxs.forEach(i => {
+                const s = result.sources?.[i];
+                if (s && typeof s.url === 'string') {
+                  sourceUrls.push(s.url);
+                }
+              });
+            }
+
+            // 2) If the finding provides explicit URLs
+            if (Array.isArray(rawFinding['sourceUrls'])) {
+              (rawFinding['sourceUrls'] as unknown[]).forEach(u => {
+                if (typeof u === 'string') { sourceUrls.push(u); }
+              });
+            }
+
+            // 3) If the finding provides 'sources' objects with url fields
+            if (Array.isArray(rawFinding['sources'])) {
+              (rawFinding['sources'] as unknown[]).forEach(sObj => {
+                if (this.isRecord(sObj) && typeof sObj['url'] === 'string') {
+                  sourceUrls.push(sObj['url']);
+                }
+              });
+            }
+
+            // Deduplicate URLs for this finding
+            const uniqueUrls = Array.from(new Set(sourceUrls));
+
+            const rawCategory = this.asString(rawFinding['category']);
+            const category =
+              rawCategory === 'analytical' || rawCategory === 'speculative'
+                ? (rawCategory)
+                : 'factual';
+
             allFindings.push({
-              claim: finding?.claim ?? finding?.statement ?? `Finding ${index + 1}`,
-              evidence: finding?.evidence ?? finding?.explanation ?? '',
-              confidence: finding?.confidence ?? result.qualityScore,
-              sourceIndices: finding?.sourceIndices ?? [],
-              category: finding?.category ?? 'factual',
+              claim,
+              evidence,
+              confidence,
+              sourceUrls: uniqueUrls,
+              category,
               stepId: result.stepId
             });
           });
-        } else if (data.claim || data.statement) {
-          // Single finding in result
+        } else if (this.isRecord(data) && (typeof data['claim'] === 'string' || typeof data['statement'] === 'string')) {
+          // Single finding in result (safe extraction)
+          const claim = this.asString(data['claim']) ?? this.asString(data['statement']) ?? 'Finding';
+          const evidence = this.asString(data['evidence']) ?? this.asString(data['explanation']) ?? '';
+          const confidence = this.asNumber(data['confidence']) ?? result.qualityScore;
+
+          // Resolve sources similarly for single finding
+          const sourceUrls: string[] = [];
+
+          const idxs = this.asNumberArray(data['sourceIndices']);
+          if (idxs && Array.isArray(result.sources)) {
+            idxs.forEach(i => {
+              const s = result.sources?.[i];
+              if (s && typeof s.url === 'string') {
+                sourceUrls.push(s.url);
+              }
+            });
+          }
+
+          if (Array.isArray(data['sourceUrls'])) {
+            (data['sourceUrls'] as unknown[]).forEach(u => {
+              if (typeof u === 'string') {
+                sourceUrls.push(u);
+              }
+            });
+          }
+
+          if (Array.isArray(data['sources'])) {
+            (data['sources'] as unknown[]).forEach(sObj => {
+              if (this.isRecord(sObj) && typeof sObj['url'] === 'string') {
+                sourceUrls.push(sObj['url']);
+              }
+            });
+          }
+
+          const uniqueUrls = Array.from(new Set(sourceUrls));
+
+          const rawCategory = this.asString(data['category']);
+          const category =
+            rawCategory === 'analytical' || rawCategory === 'speculative'
+              ? (rawCategory)
+              : 'factual';
+
           allFindings.push({
-            claim: data.claim ?? data.statement,
-            evidence: data.evidence ?? data.explanation ?? '',
-            confidence: data.confidence ?? result.qualityScore,
-            sourceIndices: data.sourceIndices ?? [],
-            category: data.category ?? 'factual',
+            claim,
+            evidence,
+            confidence,
+            sourceUrls: uniqueUrls,
+            category,
             stepId: result.stepId
           });
         }
@@ -185,13 +292,14 @@ export class ResultAggregator {
 
   /**
    * Consolidate findings by merging similar claims and resolving conflicts
+   * Now maps per-finding source URLs into indices into the provided deduplicated sources array.
    */
   private consolidateFindings(
     findings: Array<{
       claim: string;
       evidence: string;
       confidence: number;
-      sourceIndices: number[];
+      sourceUrls: string[]; // updated to use URLs
       category: 'factual' | 'analytical' | 'speculative';
       stepId: string;
     }>,
@@ -199,6 +307,15 @@ export class ResultAggregator {
   ): ResearchFinding[] {
     const consolidated: ResearchFinding[] = [];
     const processedClaims = new Set<string>();
+
+    // Precompute normalized URL -> index map for the provided deduplicated sources
+    const sourceIndexByNormalizedUrl = new Map<string, number>();
+    for (let i = 0; i < sources.length; i++) {
+      const s = sources[i];
+      if (s && typeof s.url === 'string') {
+        sourceIndexByNormalizedUrl.set(this.normalizeUrl(s.url), i);
+      }
+    }
 
     // Group similar findings
     const claimGroups = this.groupSimilarFindings(findings);
@@ -217,10 +334,15 @@ export class ResultAggregator {
       const allEvidence = group.map(f => f.evidence).filter(e => e);
       const consolidatedEvidence = this.consolidateEvidence(allEvidence);
 
-      // Collect all source indices
+      // Collect all source indices by resolving each finding's sourceUrls into indices in 'sources'
       const allSourceIndices = new Set<number>();
       group.forEach(finding => {
-        finding.sourceIndices.forEach(idx => allSourceIndices.add(idx));
+        (finding.sourceUrls ?? []).forEach(url => {
+          const idx = sourceIndexByNormalizedUrl.get(this.normalizeUrl(url));
+          if (typeof idx === 'number') {
+            allSourceIndices.add(idx);
+          }
+        });
       });
 
       // Determine category based on agreement
@@ -247,7 +369,7 @@ export class ResultAggregator {
     claim: string;
     evidence: string;
     confidence: number;
-    sourceIndices: number[];
+    sourceUrls: string[];
     category: 'factual' | 'analytical' | 'speculative';
     stepId: string;
   }>): Array<typeof findings> {
@@ -264,7 +386,7 @@ export class ResultAggregator {
         }
 
         const firstClaim = group[0]?.claim;
-        if (firstClaim && this.areClaimsSimilar(finding.claim, firstClaim)) {
+        if (typeof firstClaim === 'string' && firstClaim.length > 0 && this.areClaimsSimilar(finding.claim, firstClaim)) {
           group.push(finding);
           addedToGroup = true;
           break;
@@ -365,7 +487,7 @@ export class ResultAggregator {
   }>): 'factual' | 'analytical' | 'speculative' {
     const categories = findings.map(f => f.category);
     const categoryCounts = categories.reduce((counts, cat) => {
-      counts[cat] = (counts[cat] || 0) + 1;
+      counts[cat] = (counts[cat] ?? 0) + 1;
       return counts;
     }, {} as Record<string, number>);
 
@@ -439,7 +561,7 @@ export class ResultAggregator {
     const uniqueSourceTypes = new Set<string>();
 
     for (const result of results) {
-      if (result.sources) {
+      if (Array.isArray(result.sources)) {
         result.sources.forEach(source => uniqueSourceTypes.add(source.type));
       }
     }
@@ -459,11 +581,21 @@ export class ResultAggregator {
   /**
    * Generate methodology summary from plan and results
    */
-  private generateMethodologySummary(plan: any, results: ResearchStepResult[]): string {
-    const approach = plan.methodology?.approach ?? 'systematic';
-    const agentTypes = [...new Set(results.map(r => r.stepId.split('-')[1]))]; // Extract agent types from step IDs
+  private generateMethodologySummary(plan: ResearchPlan, results: ResearchStepResult[]): string {
+    // Guard against unexpected plan shapes even though plan is now typed
+    const approach = plan?.methodology?.approach ?? 'systematic';
 
-    return `This research used a ${approach} approach, combining data from ${agentTypes.length} different agent types: ${agentTypes.join(', ')}. The methodology included ${plan.executionSteps?.length || 0} distinct research steps with quality validation and source verification.`;
+    // Attempt to extract agent types from step IDs safely
+    const rawAgentTypes = results
+      .map(r => (typeof r.stepId === 'string' ? r.stepId.split('-')[1] : undefined))
+      .filter((t): t is string => typeof t === 'string');
+
+    const agentTypes = [...new Set(rawAgentTypes)];
+
+    const stepCount = Array.isArray(plan.executionSteps) ? plan.executionSteps.length : 0;
+    const topic = typeof plan.topic === 'string' ? plan.topic : 'unspecified topic';
+
+    return `This research on "${topic}" used a ${approach} approach, combining data from ${agentTypes.length} different agent types: ${agentTypes.join(', ') || 'none'}. The methodology included ${stepCount} distinct research steps with quality validation and source verification.`;
   }
 
   /**
@@ -529,7 +661,7 @@ export class ResultAggregator {
     }> = [];
 
     // Simple contradiction detection based on keyword opposites
-    const oppositePairs: [string, string][] = [
+    const oppositePairs: Array<[string, string]> = [
       ['increase', 'decrease'],
       ['positive', 'negative'],
       ['effective', 'ineffective'],
@@ -584,5 +716,31 @@ export class ResultAggregator {
    */
   getCachedResults(researchId: string): ResearchStepResult[] | null {
     return this.resultCache.get(researchId) ?? null;
+  }
+
+  /**
+   * Runtime helpers to safely work with unknown-shaped data
+   */
+  private isRecord(x: unknown): x is Record<string, unknown> {
+    return typeof x === 'object' && x !== null;
+  }
+
+  private asString(value: unknown): string | undefined {
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  private asNumber(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  }
+
+  private asNumberArray(value: unknown): number[] | undefined {
+    if (!Array.isArray(value)) { return undefined; }
+    const nums: number[] = [];
+    for (const item of value) {
+      if (typeof item === 'number' && Number.isFinite(item)) {
+        nums.push(item);
+      }
+    }
+    return nums;
   }
 }

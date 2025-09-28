@@ -7,6 +7,7 @@ import type {
   ProgressUpdate,
   ResearchStep
 } from '../shared/interfaces.js';
+import { log } from './logger.js';
 
 /**
  * State Manager for orchestrating research execution
@@ -45,7 +46,7 @@ export class OrchestratorStateManager {
     };
 
     this.researchStates.set(researchId, state);
-    this.persistState(researchId, state);
+    this.persistState(researchId);
 
     return state;
   }
@@ -69,7 +70,7 @@ export class OrchestratorStateManager {
     state.currentPhase = phase;
     state.lastUpdated = new Date();
 
-    this.persistState(researchId, state);
+    this.persistState(researchId);
   }
 
   /**
@@ -92,7 +93,7 @@ export class OrchestratorStateManager {
     }
 
     state.lastUpdated = new Date();
-    this.persistState(researchId, state);
+    this.persistState(researchId);
   }
 
   /**
@@ -122,7 +123,7 @@ export class OrchestratorStateManager {
     this.updateProgressMetrics(state);
 
     state.lastUpdated = new Date();
-    this.persistState(researchId, state);
+    this.persistState(researchId);
   }
 
   /**
@@ -137,7 +138,7 @@ export class OrchestratorStateManager {
     state.issues.push(issue);
     state.lastUpdated = new Date();
 
-    this.persistState(researchId, state);
+    this.persistState(researchId);
   }
 
   /**
@@ -152,13 +153,13 @@ export class OrchestratorStateManager {
     const issue = state.issues.find(i => i.id === issueId);
     if (issue) {
       issue.resolvedAt = new Date();
-      if (resolution) {
+      if (typeof resolution === 'string' && resolution.length > 0) {
         issue.resolution = resolution;
       }
     }
 
     state.lastUpdated = new Date();
-    this.persistState(researchId, state);
+    this.persistState(researchId);
   }
 
   /**
@@ -174,7 +175,7 @@ export class OrchestratorStateManager {
     if (step) {
       step.progressUpdates.push(update);
       state.lastUpdated = new Date();
-      this.persistState(researchId, state);
+      this.persistState(researchId);
     }
   }
 
@@ -225,10 +226,19 @@ export class OrchestratorStateManager {
     const cutoffTime = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
     const cleanedUp: string[] = [];
 
-    for (const [researchId, state] of this.researchStates.entries()) {
-      if (state.lastUpdated < cutoffTime && this.isResearchComplete(researchId)) {
-        this.researchStates.delete(researchId);
-        cleanedUp.push(researchId);
+    // Use the stored state object (st) directly so we don't introduce an unused variable
+    for (const [researchId, st] of this.researchStates.entries()) {
+      if (st.lastUpdated < cutoffTime) {
+        const totalSteps = st.plan.executionSteps.length;
+        const completedSteps = st.completedSteps.length;
+        const activeSteps = st.activeSteps.length;
+
+        // Determine completeness from the local state rather than calling isResearchComplete
+        const isComplete = completedSteps === totalSteps && activeSteps === 0;
+        if (isComplete) {
+          this.researchStates.delete(researchId);
+          cleanedUp.push(researchId);
+        }
       }
     }
 
@@ -240,8 +250,14 @@ export class OrchestratorStateManager {
    */
   listActiveResearch(): string[] {
     const active: string[] = [];
-    for (const [researchId, state] of this.researchStates.entries()) {
-      if (!this.isResearchComplete(researchId)) {
+    // Iterate entries and use the state object to decide activity to avoid unused-variable issues
+    for (const [researchId, st] of this.researchStates.entries()) {
+      const totalSteps = st.plan.executionSteps.length;
+      const completedSteps = st.completedSteps.length;
+      const activeSteps = st.activeSteps.length;
+
+      const isComplete = completedSteps === totalSteps && activeSteps === 0;
+      if (!isComplete) {
         active.push(researchId);
       }
     }
@@ -250,8 +266,8 @@ export class OrchestratorStateManager {
 
   private calculateEstimatedTime(steps: ResearchStep[]): number {
     return steps.reduce((total, step) => {
-      // Estimate 30 minutes per step if not specified
-      return total + (step.estimatedDuration || 30);
+      // Estimate 1 minute per step if not specified
+      return total + (step.estimatedDuration || 1);
     }, 0);
   }
 
@@ -278,7 +294,7 @@ export class OrchestratorStateManager {
     state.progress.overallConfidence = avgQuality || 0.5;
   }
 
-  private persistState(researchId: string, state: OrchestrationState): void {
+  private persistState(researchId: string): void {
     if (!this.statePersistenceEnabled) {
       return;
     }
@@ -286,9 +302,9 @@ export class OrchestratorStateManager {
     try {
       // In a real implementation, this would save to a database or file
       // For now, just log that persistence would happen
-      console.log(`Persisting state for research ${researchId}`);
+      log('log', `Persisting state for research ${researchId}`);
     } catch (error) {
-      console.error(`Failed to persist state for research ${researchId}:`, error);
+      log('error', `Failed to persist state for research ${researchId}:`, error);
     }
   }
 
@@ -300,9 +316,9 @@ export class OrchestratorStateManager {
     try {
       // In a real implementation, this would load from a database or file
       // For now, just log that loading would happen
-      console.log('Loading persisted research states');
+      log('log', 'Loading persisted research states');
     } catch (error) {
-      console.error('Failed to load persisted states:', error);
+      log('error', 'Failed to load persisted states:', error);
     }
   }
 }

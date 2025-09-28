@@ -1,8 +1,9 @@
+import type { Flow } from '@genkit-ai/core';
 import { ai } from '../config.js';
 import { UserFacingError } from '../errors/UserFacingError.js';
-import { DataAnalysisInputSchema, DataAnalysisOutputSchema } from '../schemas/dataAnalysisSchema.js';
+import { DataAnalysisInputSchema, DataAnalysisOutputSchema } from '../schemas/index.js';
 
-export const dataAnalysisFlow = ai.defineFlow(
+export const dataAnalysisFlow: Flow<typeof DataAnalysisInputSchema, typeof DataAnalysisOutputSchema> = ai.defineFlow(
   {
     name: 'dataAnalysisFlow',
     inputSchema: DataAnalysisInputSchema,

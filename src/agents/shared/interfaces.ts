@@ -133,7 +133,8 @@ export interface ResearchStepExecution {
   progressUpdates: ProgressUpdate[];
   assignedAgent?: string;
   retryCount: number;
-  result?: any; // Optional property to store the task response
+  /** Replaced `any` with ResultPayload for type safety and clarity. */
+  result?: ResultPayload;
 }
 
 export interface ResearchStepResult {
@@ -225,6 +226,16 @@ export interface QueryAnalysis {
   estimatedScope: 'narrow' | 'broad' | 'comprehensive';
   timeline: 'short' | 'medium' | 'long';
 }
+
+// New exported union type for step results to avoid `any` while remaining flexible.
+// Includes concrete known result shapes plus a generic record fallback and null.
+export type ResultPayload =
+  | TaskResponse
+  | ResearchStepResult
+  | SynthesisResult
+  | ResearchResult
+  | Record<string, unknown>
+  | null;
 
 // Utility types
 export type AgentType = 'planning' | 'orchestrator' | 'web-research' | 'academic-research' | 'news-research' | 'data-analysis';

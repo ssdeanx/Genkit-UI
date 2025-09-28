@@ -37,7 +37,7 @@ export class ProgressTracker {
    * Record the start of a research step execution
    */
   recordStepStart(stepId: string, execution: ResearchStepExecution): void {
-    this.stepStartTimes.set(stepId, execution.startedAt || new Date());
+    this.stepStartTimes.set(stepId, execution.startedAt ?? new Date());
 
     // Add progress update for step start
     const researchId = this.extractResearchIdFromStepId(stepId);
@@ -141,7 +141,7 @@ export class ProgressTracker {
    * Calculate estimated time remaining for the research
    */
   private calculateEstimatedTimeRemaining(researchId: string): number {
-    const updates = this.progressHistory.get(researchId) || [];
+    const updates = this.progressHistory.get(researchId) ?? [];
     const latestUpdate = updates[updates.length - 1];
 
     if (latestUpdate?.estimatedTimeRemaining !== undefined) {
@@ -186,7 +186,7 @@ export class ProgressTracker {
     const actualDurationMinutes = actualDurationMs / (1000 * 60); // Convert to minutes
     const currentEstimate = this.estimatedDurations.get(stepId);
 
-    if (currentEstimate) {
+    if (currentEstimate !== undefined) {
       // Use exponential moving average for updated estimate
       const alpha = 0.3; // Learning rate
       const newEstimate = alpha * actualDurationMinutes + (1 - alpha) * currentEstimate;
@@ -198,7 +198,7 @@ export class ProgressTracker {
    * Add a progress update to the history
    */
   private addProgressUpdate(researchId: string, update: ProgressUpdate): void {
-    const history = this.progressHistory.get(researchId) || [];
+    const history = this.progressHistory.get(researchId) ?? [];
     history.push(update);
     this.progressHistory.set(researchId, history);
 
@@ -214,14 +214,14 @@ export class ProgressTracker {
   private extractResearchIdFromStepId(stepId: string): string {
     // This is a simple implementation - in practice, you might want a more robust way
     // to associate steps with research IDs
-    return stepId.split('-')[0] || 'unknown';
+    return stepId.split('-')[0] ?? 'unknown';
   }
 
   /**
    * Get progress history for a research project
    */
   getProgressHistory(researchId: string): ProgressUpdate[] {
-    return this.progressHistory.get(researchId) || [];
+    return this.progressHistory.get(researchId) ?? [];
   }
 
   /**
@@ -232,8 +232,8 @@ export class ProgressTracker {
     overallProgress: ReturnType<ProgressTracker['calculateOverallProgress']>;
     recentUpdates: ProgressUpdate[];
   } {
-    const history = this.progressHistory.get(researchId) || [];
-    const currentStatus = history[history.length - 1] || null;
+    const history = this.progressHistory.get(researchId) ?? [];
+    const currentStatus = history[history.length - 1] ?? null;
     const overallProgress = this.calculateOverallProgress(orchestrationState);
     const recentUpdates = history.slice(-5); // Last 5 updates
 
@@ -265,7 +265,7 @@ export class ProgressTracker {
     issues: string[];
   } {
     const progress = this.calculateOverallProgress(orchestrationState);
-    const history = this.progressHistory.get(researchId) || [];
+    const history = this.progressHistory.get(researchId) ?? [];
 
     const summary = `Research ${researchId} is ${progress.percentage.toFixed(1)}% complete with ${progress.completedSteps} of ${progress.totalSteps} steps finished.`;
 
@@ -298,7 +298,7 @@ export class ProgressTracker {
    * Check if research is at risk of missing deadline
    */
   isAtRiskOfDelay(orchestrationState: OrchestrationState, deadline?: Date): boolean {
-    if (!deadline) {
+    if (deadline === null || deadline === undefined) {
       return false;
     }
 
@@ -319,12 +319,14 @@ export class ProgressTracker {
     this.progressHistory.delete(researchId);
 
     // Clean up step-specific data
-    for (const [stepId, startTime] of this.stepStartTimes.entries()) {
+    // Track and clean step-specific data
+    for (const [stepId] of this.stepStartTimes.entries()) {
       if (stepId.startsWith(`${researchId}-`)) {
         this.stepStartTimes.delete(stepId);
         this.estimatedDurations.delete(stepId);
       }
     }
+    // Optional: emit metrics via a logger sink if desired
   }
 
   /**
@@ -336,7 +338,7 @@ export class ProgressTracker {
     timeAccuracy: number; // How accurate our estimates are
     totalActiveTime: number;
   } {
-    const history = this.progressHistory.get(researchId) || [];
+    const history = this.progressHistory.get(researchId) ?? [];
     const completedSteps = Array.from(this.stepStartTimes.entries())
       .filter(([stepId]) => stepId.startsWith(`${researchId}-`))
       .filter(([stepId]) => {

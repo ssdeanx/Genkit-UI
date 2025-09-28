@@ -1,6 +1,7 @@
 import type { OrchestrationState, A2AMessage } from '../shared/interfaces.js';
-import type { ResearchStepExecution, TaskResponse, TaskRequest } from '../shared/interfaces.js';
+import type { ResearchStepExecution, TaskRequest, AgentType } from '../shared/interfaces.js';
 import type { TaskDelegator } from './task-delegator.js';
+import { A2ACommunicationManager } from './a2a-communication.js';
 
 /**
  * Message Router for the Orchestrator Agent
@@ -10,10 +11,19 @@ export class MessageRouter {
   private agentRegistry: Map<string, AgentInfo> = new Map();
   private messageQueue: A2AMessage[] = [];
   private routingRules: Map<string, RoutingRule[]> = new Map();
+  private taskDelegator: TaskDelegator;
+  private a2aManager: A2ACommunicationManager;
 
-  constructor(private taskDelegator: TaskDelegator) {
+
+  // Fix unused variable warnings FIXME: Remove when fully implemented in all places
+  constructor(taskDelegator: TaskDelegator, a2aManager?: A2ACommunicationManager) {
+    // Allow optional injection to preserve backward compatibility
+    this.taskDelegator = taskDelegator;
+    this.a2aManager = a2aManager ?? new A2ACommunicationManager();
     this.initializeRoutingRules();
+    this.bootstrapRegistryFromEndpoints();
   }
+
 
   /**
    * Register an agent with the router
@@ -90,7 +100,7 @@ export class MessageRouter {
    */
   private async determineRouting(message: A2AMessage, orchestrationState: OrchestrationState): Promise<RoutingDecision> {
     const targets: RouteTarget[] = [];
-    const rules = this.routingRules.get(message.type) || [];
+    const rules = this.routingRules.get(message.type) ?? [];
 
     // Apply routing rules
     for (const rule of rules) {
@@ -108,7 +118,7 @@ export class MessageRouter {
 
     // If no rules matched, use default routing
     if (targets.length === 0) {
-      targets.push(...this.getDefaultTargets(message, orchestrationState));
+      targets.push(...this.getDefaultTargets(message));
     }
 
     // Sort by priority and limit to max targets
@@ -157,27 +167,36 @@ export class MessageRouter {
   }
 
   /**
-   * Send message to agent (placeholder for actual A2A transport)
+   * Send message to agent (Actual A2A transport)
    */
-  private async sendMessageToAgent(message: A2AMessage, _agent: AgentInfo): Promise<any> {
-    // This would be replaced with actual A2A communication
-    // For now, simulate agent response based on message type
-
+  private async sendMessageToAgent(message: A2AMessage, agent: AgentInfo): Promise<unknown> {
+  // Use real A2A transport where possible
     switch (message.type) {
-      case 'task-request':
-        // For task requests, we would delegate through the task delegator
-        // Since delegateStep is private, we'll simulate the delegation
+      case 'task-request': {
         const payload = message.payload as TaskRequest;
-        return { status: 'delegated', taskId: payload.taskId };
-
-      case 'status-update':
-        return { status: 'acknowledged' };
-
-      case 'error':
-        return { status: 'error-received' };
-
-      default:
-        return { status: 'processed' };
+        // Prefer explicit agent type from the task step
+        const agentType: AgentType = payload.step.agentType;
+        return await this.a2aManager.sendTask(agentType, payload);
+      }
+      case 'cancel': {
+        const { taskId } = message.payload as { taskId: string };
+        const canceled = await this.a2aManager.cancelTask(taskId);
+        return { canceled };
+      }
+      case 'status-update': {
+        // In a full system we could forward status to orchestrator or metrics sink
+        return { status: 'acknowledged', agent: agent.id };
+      }
+      case 'error': {
+        return { status: 'error-received', agent: agent.id };
+      }
+      case 'task-response': {
+        // In a full implementation we would route task responses back to orchestrator/state manager
+        return { status: 'response-accepted', agent: agent.id };
+      }
+      default: {
+        return { status: 'processed', agent: agent.id };
+      }
     }
   }
 
@@ -186,14 +205,15 @@ export class MessageRouter {
    */
   private async evaluateRule(rule: RoutingRule, message: A2AMessage, orchestrationState: OrchestrationState): Promise<boolean> {
     // Check message type match
-    if (rule.messageType && rule.messageType !== message.type) {
+    if (typeof rule.messageType === 'string' && rule.messageType !== message.type) {
       return false;
     }
 
     // Check agent capability match
-    if (rule.requiredCapability) {
+    if (typeof rule.requiredCapability === 'string' && rule.requiredCapability.length > 0) {
       const agent = this.agentRegistry.get(rule.targetAgentId);
-      if (!agent?.capabilities.includes(rule.requiredCapability)) {
+      const hasCapability = Array.isArray(agent?.capabilities) && agent.capabilities.includes(rule.requiredCapability);
+      if (!hasCapability) {
         return false;
       }
     }
@@ -216,14 +236,16 @@ export class MessageRouter {
         return step?.status === condition.expectedStatus; }
 
       case 'agent-availability':
-        { if (!condition.agentId) {
+        {
+          if (typeof condition.agentId !== 'string' || condition.agentId.length === 0) {
           return false;
         }
         const agent = this.agentRegistry.get(condition.agentId);
         return agent?.status === 'active'; }
 
       case 'load-threshold':
-        { if (!condition.agentId || condition.threshold === undefined) {
+        {
+          if (typeof condition.agentId !== 'string' || condition.agentId.length === 0 || condition.threshold === undefined) {
           return false;
         }
         const load = this.getAgentLoad(condition.agentId);
@@ -237,13 +259,15 @@ export class MessageRouter {
   /**
    * Get default routing targets when no rules match
    */
-  private getDefaultTargets(message: A2AMessage, orchestrationState: OrchestrationState): RouteTarget[] {
+  // _orchestrationState reserved for future conditions derived from orchestration
+  private getDefaultTargets(message: A2AMessage): RouteTarget[] {
     const targets: RouteTarget[] = [];
 
     // For task execution messages, route to appropriate agent types
     if (message.type === 'task-request') {
-      const step = (message.payload as TaskRequest)?.step;
-      if (step) {
+      const payload = message.payload as TaskRequest;
+      const step = payload?.step;
+      if (step !== undefined && step !== null) {
         const { agentType } = step;
         const agents = Array.from(this.agentRegistry.values())
           .filter(agent => agent.type === agentType && agent.status === 'active')
@@ -258,7 +282,7 @@ export class MessageRouter {
     }
 
     // For other messages, route to orchestrator agents
-    if (targets.length === 0) {
+    if ((targets?.length ?? 0) === 0) {
       const orchestrators = Array.from(this.agentRegistry.values())
         .filter(agent => agent.type === 'orchestrator' && agent.status === 'active')
         .map(agent => ({
@@ -331,6 +355,30 @@ export class MessageRouter {
   }
 
   /**
+   * Initialize agent registry from configured endpoints and current task load
+   */
+  private bootstrapRegistryFromEndpoints(): void {
+    const endpoints = this.a2aManager.getAgentEndpoints();
+    const executions: ResearchStepExecution[] = this.taskDelegator.getActiveTasks();
+    (Object.keys(endpoints) as Array<keyof typeof endpoints>).forEach((k) => {
+      const type = k as unknown as AgentType;
+      const endpoint = endpoints[type];
+      const id = `${type}-auto`;
+      const activeTasks = executions.filter(e => e.agentId === type && e.status === 'running').length;
+      this.registerAgent(id, {
+        id,
+        type,
+        capabilities: [],
+        endpoint,
+        status: 'active',
+        registeredAt: new Date(),
+        lastSeen: new Date(),
+        activeTasks
+      });
+    });
+  }
+
+  /**
    * Update agent status based on routing result
    */
   private updateAgentStatus(agentId: string, success: boolean): void {
@@ -338,7 +386,7 @@ export class MessageRouter {
     if (agent) {
       agent.lastSeen = new Date();
       if (!success) {
-        agent.consecutiveFailures = (agent.consecutiveFailures || 0) + 1;
+        agent.consecutiveFailures = (agent.consecutiveFailures ?? 0) + 1;
         if (agent.consecutiveFailures >= 3) {
           agent.status = 'unhealthy';
         }
@@ -353,9 +401,13 @@ export class MessageRouter {
    * Get current load for an agent
    */
   private getAgentLoad(agentId: string): number {
-    // Simplified load calculation - would be more sophisticated in real implementation
+    // Approximate load by counting active tasks for the agent's type via TaskDelegator
     const agent = this.agentRegistry.get(agentId);
-    return agent?.activeTasks || 0;
+    if (!agent) {
+      return 0;
+    }
+    const executions: ResearchStepExecution[] = this.taskDelegator.getActiveTasks();
+    return executions.filter(e => e.agentId === agent.type && e.status === 'running').length;
   }
 
   /**
@@ -392,7 +444,7 @@ export class MessageRouter {
  */
 export interface AgentInfo {
   id: string;
-  type: string;
+  type: AgentType;
   capabilities: string[];
   endpoint: string;
   status: 'active' | 'inactive' | 'unhealthy';
@@ -434,7 +486,7 @@ export interface RoutingDecision {
 export interface RouteResult {
   agentId: string;
   success: boolean;
-  response?: any;
+  response?: unknown;
   responseTime?: number;
   error?: string;
 }
