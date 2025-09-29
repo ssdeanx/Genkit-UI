@@ -22,7 +22,7 @@
 [![tsx](https://img.shields.io/npm/v/tsx?label=tsx&logo=npm)](https://www.npmjs.com/package/tsx)
 [![vitest](https://img.shields.io/npm/v/vitest?label=vitest&logo=npm)](https://www.npmjs.com/package/vitest)
 [![prettier](https://img.shields.io/npm/v/prettier?label=prettier&logo=npm)](https://www.npmjs.com/package/prettier)
-[![pino-pretty](https://img.shields.io/npm/v/pino-pretty?label=pino-pretty&logo=npm)](https://www.npmjs.com/package/pino-pretty)
+[![pino-pretty]
 
 A production-oriented, TypeScript multi-agent AI platform built on Google Genkit. The system composes Genkit flows, reusable tools, and independent A2A agents to support complex tasks such as research orchestration, code generation, and content editing.
 

@@ -18,7 +18,7 @@ The Data Analysis Agent specializes in quantitative research methodologies, prov
 
 ```json
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": "0.3.0",
   "name": "Data Analysis Agent",
   "description": "An agent that conducts statistical analysis, quantitative research, and data-driven insights with rigorous methodological standards.",
   "url": "http://localhost:41247/",

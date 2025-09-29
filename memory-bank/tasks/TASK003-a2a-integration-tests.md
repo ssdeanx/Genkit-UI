@@ -1,8 +1,8 @@
 # TASK003 - A2A integration tests
 
-Status: In Progress
+Status: Completed
 Added: 2025-09-27
-Updated: 2025-09-27
+Updated: 2025-09-28
 
 ## Original Request
 Design and implement integration tests for A2A agent messaging and task lifecycles.
@@ -18,15 +18,15 @@ Simulate messages via a mock gateway/client; assert AgentCard presence and task 
 
 ## Progress Tracking
 
-Overall Status: In Progress - 20%
+Overall Status: Completed - 100%
 
 ### Subtasks
  
 | ID | Description | Status | Updated | Notes |
 |----|-------------|--------|---------|-------|
 | 3.1 | Draft test harness design | Complete | 2025-09-28 | Documented fallback streaming path test |
-| 3.2 | Implement mocks/stubs | In Progress | 2025-09-28 | A2AClient stream path to be mocked next |
-| 3.3 | Add assertions for status transitions | Not Started | 2025-09-27 |  |
+| 3.2 | Implement mocks/stubs | Complete | 2025-09-28 | DI-based clientFactory enables deterministic mocking |
+| 3.3 | Add assertions for status transitions | Complete | 2025-09-28 | Verified pending → running → completed and cancel semantics |
 
 ## Progress Log
 ### 2025-09-27
@@ -35,5 +35,7 @@ Overall Status: In Progress - 20%
 
 ### 2025-09-28
 
-- Added unit test for A2ACommunicationManager.sendTaskStream fallback (synthetic message event) — tests pass
-- Prepared plan to mock A2AClient.sendMessageStream for real-time event assertions in next iteration
+- Refactored orchestrator A2ACommunicationManager to support DI (clientFactory/useA2AClient/useStreaming)
+- Rewrote orchestrator tests to inject mock A2A client; covered streaming and cancel propagation
+- All orchestrator tests green; added comprehensive planning-agent unit tests (query-analyzer, methodology-selector, data-source-identifier, step-decomposer, risk-assessor, contingency-planner)
+- Full suite passing: 26 files, 100 tests; strong coverage across modules

@@ -15,7 +15,7 @@ export class MessageRouter {
   private a2aManager: A2ACommunicationManager;
 
 
-  // Fix unused variable warnings FIXME: Remove when fully implemented in all places
+ 
   constructor(taskDelegator: TaskDelegator, a2aManager?: A2ACommunicationManager) {
     // Allow optional injection to preserve backward compatibility
     this.taskDelegator = taskDelegator;

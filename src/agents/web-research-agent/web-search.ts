@@ -1,4 +1,5 @@
 import { getJson } from 'serpapi';
+import { flowlogger } from '../../logger.js';
 
 /**
  * Web Search Utilities for the Web Research Agent
@@ -10,8 +11,19 @@ export class WebSearchUtils {
   constructor(apiKey?: string) {
     this.apiKey = apiKey ?? process.env.SERPAPI_API_KEY ?? '';
     if (!this.apiKey) {
-      console.warn('SERPAPI_API_KEY not set. Web search functionality will be limited.');
+      flowlogger.warn('SERPAPI_API_KEY not set. Web search functionality will be limited.');
     }
+  }
+
+  // Helper: safely convert unknown to string
+  private asString(val: unknown): string {
+    return val === undefined || val === null ? '' : String(val);
+  }
+
+  // Helper: safely convert unknown to number with fallback
+  private asNumber(val: unknown, fallback = 0): number {
+    const n = Number(val);
+    return Number.isFinite(n) ? n : fallback;
   }
 
   /**
@@ -25,15 +37,15 @@ export class WebSearchUtils {
         engine: 'google',
         num: options.limit ?? 10,
         start: options.offset ?? 0,
-        ...this.buildAdvancedParams(options)
+        ...this.buildAdvancedParams(options, query)
       };
 
-      console.log(`Performing web search for: "${query}"`);
+      flowlogger.info(`Performing web search for: "${query}"`);
       const results = await getJson(searchParams);
 
       return this.parseSearchResults(results, query);
     } catch (error) {
-      console.error('Web search failed:', error);
+      flowlogger.error({ error }, 'Web search failed');
       throw new Error(`Web search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -51,12 +63,12 @@ export class WebSearchUtils {
         ...this.buildNewsParams(options)
       };
 
-      console.log(`Performing news search for: "${query}"`);
+      flowlogger.info(`Performing news search for: "${query}"`);
       const results = await getJson(searchParams);
 
       return this.parseNewsResults(results, query);
     } catch (error) {
-      console.error('News search failed:', error);
+      flowlogger.error({ error }, 'News search failed');
       throw new Error(`News search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -71,15 +83,15 @@ export class WebSearchUtils {
         api_key: this.apiKey,
         engine: 'google_scholar',
         num: options.limit ?? 10,
-        ...this.buildScholarParams(options)
+        ...this.buildScholarParams(options, query)
       };
 
-      console.log(`Performing scholar search for: "${query}"`);
+      flowlogger.info(`Performing scholar search for: "${query}"`);
       const results = await getJson(searchParams);
 
       return this.parseScholarResults(results, query);
     } catch (error) {
-      console.error('Scholar search failed:', error);
+      flowlogger.error({ error }, 'Scholar search failed');
       throw new Error(`Scholar search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -87,8 +99,9 @@ export class WebSearchUtils {
   /**
    * Build advanced search parameters
    */
-  private buildAdvancedParams(options: SearchOptions): Record<string, any> {
-    const params: Record<string, any> = {};
+  private buildAdvancedParams(options: SearchOptions, baseQuery: string): SerpApiParams {
+    const params: SerpApiParams = {};
+    let q = baseQuery;
 
     if (options.timeRange) {
       // Convert time range to SerpAPI format
@@ -100,32 +113,36 @@ export class WebSearchUtils {
       }
     }
 
-    if (options.site) {
-      params.q += ` site:${options.site}`;
+    // Only append site when it's a non-empty string
+    if (typeof options.site === 'string' && options.site.trim() !== '') {
+      q += ` site:${options.site.trim()}`;
     }
 
-    if (options.excludeSites) {
+    // Exclude sites when provided as a non-empty array of strings
+    if (Array.isArray(options.excludeSites) && options.excludeSites.length > 0) {
       options.excludeSites.forEach(site => {
-        params.q += ` -site:${site}`;
+        if (typeof site === 'string' && site.trim() !== '') {
+          q += ` -site:${site.trim()}`;
+        }
       });
     }
 
-    if (options.fileType) {
-      params.q += ` filetype:${options.fileType}`;
+    if (typeof options.fileType === 'string' && options.fileType.trim() !== '') {
+      q += ` filetype:${options.fileType.trim()}`;
     }
 
-    if (options.language) {
-      params.hl = options.language;
+    if (typeof options.language === 'string' && options.language.trim() !== '') {
+      params.hl = options.language.trim();
     }
 
-    return params;
+    return { ...params, q };
   }
 
   /**
    * Build news search parameters
    */
-  private buildNewsParams(options: NewsSearchOptions): Record<string, any> {
-    const params: Record<string, any> = {};
+  private buildNewsParams(options: NewsSearchOptions): SerpApiParams {
+    const params: SerpApiParams = {};
 
     if (options.timeRange) {
       switch (options.timeRange) {
@@ -136,8 +153,8 @@ export class WebSearchUtils {
       }
     }
 
-    if (options.location) {
-      params.location = options.location;
+    if (typeof options.location === 'string' && options.location.trim() !== '') {
+      params.location = options.location.trim();
     }
 
     return params;
@@ -146,49 +163,66 @@ export class WebSearchUtils {
   /**
    * Build scholar search parameters
    */
-  private buildScholarParams(options: ScholarSearchOptions): Record<string, any> {
-    const params: Record<string, any> = {};
+  private buildScholarParams(options: ScholarSearchOptions, baseQuery: string): SerpApiParams {
+    const params: SerpApiParams = {};
+    let q = baseQuery;
 
-    if (options.yearFrom) {
-      params.as_ylo = options.yearFrom;
+    // Explicitly handle nullish/NaN/zero cases for numeric year filters.
+    // Accept only finite numbers (including 0 if meaningful) and coerce to integers.
+    if (options.yearFrom !== undefined && options.yearFrom !== null && Number.isFinite(options.yearFrom)) {
+      params.as_ylo = Math.trunc(options.yearFrom);
     }
 
-    if (options.yearTo) {
-      params.as_yhi = options.yearTo;
+    if (options.yearTo !== undefined && options.yearTo !== null && Number.isFinite(options.yearTo)) {
+      params.as_yhi = Math.trunc(options.yearTo);
     }
 
-    if (options.author) {
-      params.q += ` author:"${options.author}"`;
+    if (typeof options.author === 'string' && options.author.trim() !== '') {
+      q += ` author:"${options.author.trim()}"`;
     }
 
-    return params;
+    return { ...params, q };
   }
 
   /**
    * Parse general search results
    */
-  private parseSearchResults(results: any, query: string): SearchResult {
+  private parseSearchResults(results: SerpApiRawResults, query: string): SearchResult {
     const organicResults = results.organic_results ?? [];
     const answerBox = results.answer_box;
     const knowledgeGraph = results.knowledge_graph;
 
-    const searchResults: WebResult[] = organicResults.map((result: any) => ({
-      title: result.title,
-      link: result.link,
-      snippet: result.snippet,
-      displayLink: result.displayed_link,
-      rank: result.position,
-      credibility: this.assessCredibility(result),
-      metadata: {
-        cachedUrl: result.cached_page_link,
-        relatedPages: result.sitelinks?.inline ?? []
-      }
-    }));
+    const searchResults: WebResult[] = organicResults.map((result) => {
+      const sitelinks = ((Boolean(result['sitelinks'])) && typeof result['sitelinks'] === 'object')
+        ? ((result['sitelinks'] as Record<string, unknown>)['inline'] ?? [])
+        : [];
+
+      const relatedPages: RelatedPage[] = Array.isArray(sitelinks)
+        ? (sitelinks as unknown[]).map(item => ({
+            title: this.asString((item as Record<string, unknown>)['title']),
+            link: this.asString((item as Record<string, unknown>)['link']),
+            displayedLink: this.asString((item as Record<string, unknown>)['displayed_link'])
+          }))
+        : [];
+
+      return {
+        title: this.asString(result['title']),
+        link: this.asString(result['link']),
+        snippet: this.asString(result['snippet']),
+        displayLink: this.asString(result['displayed_link']),
+        rank: this.asNumber(result['position'], 0),
+        credibility: this.assessCredibility(result),
+        metadata: {
+          cachedUrl: this.asString(result['cached_page_link']),
+          relatedPages
+        }
+      };
+    });
 
     const baseResult = {
       query,
-      totalResults: Number(results.search_information?.total_results ?? searchResults.length),
-      searchTime: Number(results.search_information?.time_taken_displayed ?? 0),
+      totalResults: this.asNumber(results.search_information?.total_results ?? searchResults.length),
+      searchTime: this.asNumber(results.search_information?.time_taken_displayed ?? 0),
       results: searchResults,
     };
 
@@ -196,18 +230,18 @@ export class WebSearchUtils {
 
     if (answerBox) {
       result.answerBox = {
-        answer: String(answerBox.answer),
-        title: String(answerBox.title),
-        link: String(answerBox.link),
-        source: String(answerBox.displayed_link)
+        answer: this.asString(answerBox['answer']),
+        title: this.asString(answerBox['title']),
+        link: this.asString(answerBox['link']),
+        source: this.asString(answerBox['displayed_link'])
       };
     }
 
     if (knowledgeGraph) {
       result.knowledgeGraph = {
-        title: String(knowledgeGraph.title),
-        description: String(knowledgeGraph.description),
-        source: String(knowledgeGraph.source)
+        title: this.asString(knowledgeGraph['title']),
+        description: this.asString(knowledgeGraph['description']),
+        source: this.asString(knowledgeGraph['source'])
       };
     }
 
@@ -217,22 +251,22 @@ export class WebSearchUtils {
   /**
    * Parse news search results
    */
-  private parseNewsResults(results: any, query: string): NewsSearchResult {
+  private parseNewsResults(results: SerpApiRawResults, query: string): NewsSearchResult {
     const newsResults = results.news_results ?? [];
 
-    const articles: NewsArticle[] = newsResults.map((article: any) => ({
-      title: article.title,
-      link: article.link,
-      source: article.source,
-      snippet: article.snippet,
-      published: article.date,
-      thumbnail: article.thumbnail,
+    const articles: NewsArticle[] = (Array.isArray(newsResults) ? newsResults : []).map((article: NewsResult) => ({
+      title: this.asString(article.title),
+      link: this.asString(article.link),
+      source: this.asString(article.source),
+      snippet: this.asString(article.snippet),
+      published: this.asString(article.date),
+      thumbnail: this.asString(article.thumbnail),
       credibility: this.assessNewsCredibility(article)
     }));
 
     return {
       query,
-      totalResults: results.search_information?.total_results ?? articles.length,
+      totalResults: this.asNumber(results.search_information?.total_results ?? articles.length),
       articles
     };
   }
@@ -240,23 +274,61 @@ export class WebSearchUtils {
   /**
    * Parse scholar search results
    */
-  private parseScholarResults(results: any, query: string): ScholarSearchResult {
-    const scholarResults = results.organic_results ?? [];
+  private parseScholarResults(results: SerpApiRawResults, query: string): ScholarSearchResult {
+    // use ScholarRawPaper here so the ScholarRawPaper interface is actually referenced/checked by TS
+    const scholarResults = (results.organic_results ?? []) as ScholarRawPaper[];
 
-    const papers: ScholarPaper[] = scholarResults.map((paper: any) => ({
-      title: paper.title,
-      link: paper.link,
-      authors: paper.publication_info?.authors ?? [],
-      publication: paper.publication_info?.summary,
-      citedBy: paper.inline_links?.cited_by?.total ?? 0,
-      year: paper.publication_info?.year,
-      snippet: paper.snippet,
-      pdfLink: paper.resources?.[0]?.link
-    }));
+    const papers: ScholarPaper[] = (Array.isArray(scholarResults) ? scholarResults : []).map((paper) => {
+      const pubInfo = ((Boolean(paper['publication_info'])) && typeof paper['publication_info'] === 'object')
+        ? (paper['publication_info'] as Record<string, unknown>)
+        : {};
+
+      const inlineLinks = ((Boolean(paper['inline_links'])) && typeof paper['inline_links'] === 'object')
+        ? (paper['inline_links'] as Record<string, unknown>)
+        : {};
+
+      const authors = Array.isArray(pubInfo['authors']) ? (pubInfo['authors'] as string[]) : [];
+      const publication = this.asString(pubInfo['summary']);
+
+      // Safely extract cited_by.total with explicit runtime checks to avoid using unknown in conditionals
+      const citedByTotalRaw = (() => {
+        const cb = inlineLinks['cited_by'];
+        if ((Boolean(cb)) && typeof cb === 'object' && !Array.isArray(cb)) {
+          const total = (cb as Record<string, unknown>)['total'];
+          // accept numbers or numeric strings
+          if (typeof total === 'number' || typeof total === 'string') {
+            return total;
+          }
+        }
+        return undefined;
+      })();
+
+      const citedBy = this.asNumber(citedByTotalRaw, 0);
+      const yearVal = typeof pubInfo['year'] === 'number' ? (pubInfo['year']) : undefined;
+
+      // safe extraction of first resource link (if present)
+      let pdfLinkVal: string | undefined;
+      if (Array.isArray(paper['resources']) && (paper['resources'] as unknown[]).length > 0) {
+        const first = (paper['resources'] as unknown[])[0] as Record<string, unknown> | undefined;
+        pdfLinkVal = first ? this.asString(first['link']) || undefined : undefined;
+      }
+
+      return {
+        title: this.asString(paper['title']),
+        link: this.asString(paper['link']),
+        authors,
+        publication,
+        citedBy,
+        snippet: this.asString(paper['snippet']),
+        // only include optional props when defined to satisfy exactOptionalPropertyTypes
+        ...(yearVal !== undefined ? { year: yearVal } : {}),
+        ...(pdfLinkVal !== undefined ? { pdfLink: pdfLinkVal } : {})
+      };
+    });
 
     return {
       query,
-      totalResults: results.search_information?.total_results ?? papers.length,
+      totalResults: this.asNumber(results.search_information?.total_results ?? papers.length),
       papers
     };
   }
@@ -264,57 +336,71 @@ export class WebSearchUtils {
   /**
    * Assess credibility of a web result
    */
-  private assessCredibility(result: any): CredibilityScore {
+  private assessCredibility(result: OrganicResult): CredibilityScore {
     let score = 0.5; // Base score
     const factors: string[] = [];
 
-    // Domain authority indicators
-    const domain = result.displayed_link?.split('/')[0] ?? '';
-    if ((Boolean(domain.includes('.edu'))) || (Boolean(domain.includes('.gov'))) || (Boolean(domain.includes('.org')))) {
+    const domain = this.asString(result.displayed_link).split('/')[0] ?? '';
+    if (domain.includes('.edu') || domain.includes('.gov') || domain.includes('.org')) {
       score += 0.2;
       factors.push('educational/government domain');
     }
 
-    // Content freshness (if available)
-    if (result.date) {
-      const daysSincePublished = (Date.now() - new Date(result.date).getTime()) / (1000 * 60 * 60 * 24);
+    // Type-guards for date to avoid using unknown in conditional
+    const dateRaw = result.date;
+    let dateVal: Date | undefined;
+    if (typeof dateRaw === 'string' && dateRaw.trim() !== '') {
+      dateVal = new Date(dateRaw);
+    } else if (typeof dateRaw === 'number' && Number.isFinite(dateRaw)) {
+      dateVal = new Date(dateRaw);
+    }
+
+    if (dateVal && !Number.isNaN(dateVal.getTime())) {
+      const daysSincePublished = (Date.now() - dateVal.getTime()) / (1000 * 60 * 60 * 24);
       if (daysSincePublished < 365) {
         score += 0.1;
         factors.push('recent content');
       }
     }
 
-    // Snippet quality
-    if (result.snippet && result.snippet.length > 100) {
+    if (this.asString(result.snippet).length > 100) {
       score += 0.1;
       factors.push('detailed snippet');
     }
 
+    const finalScore = Math.min(1.0, Math.max(0.0, score));
     return {
-      score: Math.min(1.0, Math.max(0.0, score)),
+      score: finalScore,
       factors,
-      level: score > 0.8 ? 'high' : score > 0.6 ? 'medium' : 'low'
+      level: finalScore > 0.8 ? 'high' : finalScore > 0.6 ? 'medium' : 'low'
     };
   }
 
   /**
    * Assess credibility of a news article
    */
-  private assessNewsCredibility(article: any): CredibilityScore {
+  private assessNewsCredibility(article: NewsResult): CredibilityScore {
     let score = 0.5;
     const factors: string[] = [];
 
-    // Known reputable sources
     const reputableSources = ['bbc', 'reuters', 'ap', 'nyt', 'washingtonpost', 'guardian'];
-    const source = article.source?.toLowerCase() ?? '';
-    if (reputableSources.some(rep => Boolean(source.includes(rep)))) {
+    const source = this.asString(article.source).toLowerCase();
+    if (reputableSources.some(rep => source.includes(rep))) {
       score += 0.3;
       factors.push('reputable news source');
     }
 
-    // Recent publication
-    if (article.date) {
-      const daysSincePublished = (Date.now() - new Date(article.date).getTime()) / (1000 * 60 * 60 * 24);
+    // Explicit runtime type-guards for article date
+    const dateRaw = article.date;
+    let dateVal: Date | undefined;
+    if (typeof dateRaw === 'string' && dateRaw.trim() !== '') {
+      dateVal = new Date(dateRaw);
+    } else if (typeof dateRaw === 'number' && Number.isFinite(dateRaw)) {
+      dateVal = new Date(dateRaw);
+    }
+
+    if (dateVal && !Number.isNaN(dateVal.getTime())) {
+      const daysSincePublished = (Date.now() - dateVal.getTime()) / (1000 * 60 * 60 * 24);
       if (daysSincePublished < 7) {
         score += 0.2;
         factors.push('very recent');
@@ -324,10 +410,11 @@ export class WebSearchUtils {
       }
     }
 
+    const finalScore = Math.min(1.0, Math.max(0.0, score));
     return {
-      score: Math.min(1.0, Math.max(0.0, score)),
+      score: finalScore,
       factors,
-      level: score > 0.8 ? 'high' : score > 0.6 ? 'medium' : 'low'
+      level: finalScore > 0.8 ? 'high' : finalScore > 0.6 ? 'medium' : 'low'
     };
   }
 }
@@ -433,3 +520,88 @@ export interface ScholarSearchResult {
   totalResults: number;
   papers: ScholarPaper[];
 }
+
+// Replaced: a single broad SerpApiRawResults with precise, narrow interfaces
+// to avoid unsafe `unknown` usage and to reflect the fields the parser uses.
+
+interface SitelinkInline {
+  title?: string;
+  link?: string;
+  displayed_link?: string;
+}
+
+interface OrganicResult {
+  title?: string;
+  link?: string;
+  snippet?: string;
+  displayed_link?: string;
+  position?: number | string;
+  cached_page_link?: string;
+  sitelinks?: { inline?: SitelinkInline[] } | SitelinkInline[] | undefined;
+  date?: string | number;
+  resources?: Array<{ link?: string }>;
+  publication_info?: {
+    authors?: string[] | Array<{ name?: string }>;
+    summary?: string;
+    year?: number;
+  } | Record<string, unknown>;
+  inline_links?: {
+    cited_by?: { total?: number | string } | Record<string, unknown>;
+  } | Record<string, unknown>;
+}
+
+interface NewsResult {
+  title?: string;
+  link?: string;
+  source?: string;
+  snippet?: string;
+  date?: string | number;
+  thumbnail?: string;
+}
+
+interface ScholarRawPaper extends OrganicResult {
+  // Scholar-specific enrichments we parse from SerpAPI scholar results
+  publication_info?: {
+    authors?: Array<string | { name?: string }>;
+    summary?: string;
+    year?: number;
+  } | Record<string, unknown>;
+  inline_links?: {
+    cited_by?: { total?: number | string } | Record<string, unknown>;
+  } | Record<string, unknown>;
+  resources?: Array<{ link?: string }>;
+}
+
+interface AnswerBox {
+  answer?: string;
+  title?: string;
+  link?: string;
+  displayed_link?: string;
+}
+
+interface KnowledgeGraph {
+  title?: string;
+  description?: string;
+  source?: string;
+}
+
+interface SearchInformation {
+  total_results?: number | string;
+  time_taken_displayed?: number | string;
+}
+
+/**
+ * Narrow Serp API raw results modeled after the fields the parser reads.
+ * Keeping many fields optional mirrors the reality of SerpAPI variability.
+ */
+interface SerpApiRawResults {
+  [key: string]: unknown;
+  organic_results?: OrganicResult[];
+  news_results?: NewsResult[];
+  answer_box?: AnswerBox;
+  knowledge_graph?: KnowledgeGraph;
+  search_information?: SearchInformation;
+}
+
+// keep existing params type (flexible for callers)
+type SerpApiParams = Record<string, string | number | boolean | undefined>;

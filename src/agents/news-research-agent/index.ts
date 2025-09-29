@@ -1,13 +1,14 @@
 import express from "express";
 import { v4 as uuidv4 } from 'uuid';
 
-import type { MessageData } from "genkit";
+// import type { MessageData } from "genkit";
 import type {
   AgentCard,
   Task,
   TaskStatusUpdateEvent} from "@a2a-js/sdk";
 import type {
   TextPart,
+  Message,
 } from "@a2a-js/sdk";
 import type {
   TaskStore,
@@ -19,20 +20,84 @@ import {
   DefaultRequestHandler,
 } from "@a2a-js/sdk/server";
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
-import { ai } from "./genkit.js";
+// import { ai } from "./genkit.js";
+import { flowlogger } from "./../../logger.js";
 import type { ComprehensiveNewsResult, NewsArticle } from "./news-search.js";
 import { NewsSearchUtils } from "./news-search.js";
 
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey || apiKey.trim() === '') {
-  console.error("GEMINI_API_KEY environment variable not set or empty.");
+const apiKey = process.env.GEMINI_API_KEY ?? '';
+if (apiKey.trim().length === 0) {
+  flowlogger.error("GEMINI_API_KEY environment variable not set or empty.");
   process.exit(1);
+}
+
+// Types for synthesized results used by the executor
+interface KeyEvent {
+  title: string;
+  timeline: Array<{
+    date: string;
+    headline: string;
+    summary: string;
+    sources: Array<{
+      outlet: string;
+      url: string;
+      credibilityScore: number;
+      publicationDate: string;
+      biasAssessment: string;
+      keyQuotes: string[];
+    }>;
+  }>;
+  status: string;
+  impactLevel: string;
+  stakeholders: string[];
+}
+
+interface MediaCoverage {
+  consensus: string;
+  narratives: string[];
+  gaps: string[];
+  biasObservations: string[];
+  factCheckStatus: string;
+}
+
+interface NewsSynthesis {
+  newsFindings: Array<{
+    event: string;
+    timeline: KeyEvent['timeline'];
+    currentStatus: string;
+    impactLevel: string;
+    stakeholderImpacts: string[];
+  }>;
+  mediaAnalysis: {
+    coverageConsensus: string;
+    dominantNarratives: string[];
+    underreportedAspects: string[];
+    mediaBiasObservations: string[];
+    factCheckingStatus: string;
+  };
+  contextAndAnalysis: {
+    historicalContext: string;
+    expertReactions: string[];
+    publicReaction: string;
+    futureImplications: string;
+    relatedStories: string[];
+  };
+  metadata: {
+    totalArticles: number;
+    dateRange: string | undefined;
+    primarySources: number;
+    credibilityAverage: number;
+    lastUpdated: string;
+    breakingNews: boolean;
+    sourcesSearched: string[];
+    queryProcessed: string;
+  };
 }
 
 /**
  * NewsResearchAgentExecutor implements the agent's core logic for news analysis and current events research.
  */
-class NewsResearchAgentExecutor implements AgentExecutor {
+export class NewsResearchAgentExecutor implements AgentExecutor {
   private cancelledTasks = new Set<string>();
   private newsSearchUtils: NewsSearchUtils;
 
@@ -77,7 +142,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
     const taskId = existingTask?.id ?? uuidv4();
     const contextId = (userMessage.contextId ?? existingTask?.contextId) ?? uuidv4();
 
-    console.log(
+    flowlogger.info(
       `[NewsResearchAgentExecutor] Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId})`
     );
 
@@ -128,7 +193,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
 
       // Check if cancelled
       if (this.cancelledTasks.has(taskId)) {
-        console.log(`[NewsResearchAgentExecutor] Request cancelled for task: ${taskId}`);
+        flowlogger.info(`[NewsResearchAgentExecutor] Request cancelled for task: ${taskId}`);
         const cancelledUpdate: TaskStatusUpdateEvent = {
           kind: 'status-update',
           taskId,
@@ -203,7 +268,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
       eventBus.publish(completionUpdate);
 
     } catch (error) {
-      console.error(`[NewsResearchAgentExecutor] Error processing task ${taskId}:`, error);
+      flowlogger.error({ err: error }, `[NewsResearchAgentExecutor] Error processing task ${taskId}`);
       const failureUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
         taskId,
@@ -226,15 +291,15 @@ class NewsResearchAgentExecutor implements AgentExecutor {
     }
   }
 
-  private extractResearchQuery(userMessage: any): string {
+  private extractResearchQuery(userMessage: Message): string {
     // Extract the research query from the user message
-    const textParts = userMessage.parts.filter((p: any) => p.kind === 'text' && p.text);
+    const textParts = userMessage.parts.filter((p): p is TextPart => p.kind === 'text' && !!p.text);
     if (textParts.length === 0) {
       throw new Error('No text content found in user message');
     }
 
     // Combine all text parts and clean up the query
-    const query = textParts.map((p: any) => p.text).join(' ').trim();
+  const query = textParts.map((p) => p.text).join(' ').trim();
 
     // Remove common prefixes that might be in the query
     const cleanedQuery = query
@@ -246,7 +311,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
   }
 
   private async performNewsResearch(query: string): Promise<ComprehensiveNewsResult> {
-    console.log(`[NewsResearchAgentExecutor] Performing news research for: "${query}"`);
+  flowlogger.info(`[NewsResearchAgentExecutor] Performing news research for: "${query}"`);
 
     try {
       // Perform comprehensive news search across multiple sources
@@ -255,17 +320,19 @@ class NewsResearchAgentExecutor implements AgentExecutor {
         timeRange: 'week'
       });
 
-      console.log(`[NewsResearchAgentExecutor] Found ${results.totalResults} articles from ${results.sourcesSearched.length} sources`);
+  flowlogger.info(`[NewsResearchAgentExecutor] Found ${results.totalResults} articles from ${results.sourcesSearched.length} sources`);
 
       return results;
     } catch (error) {
-      console.error('[NewsResearchAgentExecutor] News search failed:', error);
+      flowlogger.error({ err: error }, '[NewsResearchAgentExecutor] News search failed');
       throw new Error(`News search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  private async synthesizeNewsFindings(newsResults: ComprehensiveNewsResult, originalQuery: string): Promise<any> {
-    console.log(`[NewsResearchAgentExecutor] Synthesizing findings from ${newsResults.totalResults} articles`);
+  
+
+  private async synthesizeNewsFindings(newsResults: ComprehensiveNewsResult, originalQuery: string): Promise<NewsSynthesis> {
+  flowlogger.info(`[NewsResearchAgentExecutor] Synthesizing findings from ${newsResults.totalResults} articles`);
 
     // Group articles by topic/theme
     const topicGroups = this.groupArticlesByTopic(newsResults.articles);
@@ -349,7 +416,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
     return groups;
   }
 
-  private calculateCredibilityStats(articles: NewsArticle[]): { average: number; distribution: any } {
+  private calculateCredibilityStats(articles: NewsArticle[]): { average: number; distribution: { high: number; medium: number; low: number } } {
     const scores = articles.map(a => a.credibility.score);
     const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
 
@@ -362,9 +429,9 @@ class NewsResearchAgentExecutor implements AgentExecutor {
     return { average, distribution };
   }
 
-  private extractKeyEvents(articles: NewsArticle[], query: string): any[] {
+  private extractKeyEvents(articles: NewsArticle[], query: string): KeyEvent[] {
     // Group articles by similar topics and create event summaries
-    const events: any[] = [];
+    const events: KeyEvent[] = [];
     const processedTitles = new Set<string>();
 
     for (const article of articles) {
@@ -448,7 +515,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
     return stakeholders.length > 0 ? stakeholders : ['General public'];
   }
 
-  private analyzeMediaCoverage(articles: NewsArticle[], topicGroups: Map<string, NewsArticle[]>): any {
+  private analyzeMediaCoverage(articles: NewsArticle[], topicGroups: Map<string, NewsArticle[]>): MediaCoverage {
     const sources = [...new Set(articles.map(a => a.source))];
 
     return {
@@ -460,7 +527,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
     };
   }
 
-  private generateHistoricalContext(events: any[], query: string): string {
+  private generateHistoricalContext(events: KeyEvent[], query: string): string {
     return `Recent developments in ${query} include ${events.length} key events, showing evolving patterns with increasing media attention and stakeholder engagement.`;
   }
 
@@ -479,7 +546,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
     return `Public interest appears moderate with steady coverage across ${articles.length} sources.`;
   }
 
-  private assessFutureImplications(events: any[]): string {
+  private assessFutureImplications(events: KeyEvent[]): string {
     return `Continued monitoring recommended as ${events.length} developments unfold.`;
   }
 
@@ -511,7 +578,7 @@ class NewsResearchAgentExecutor implements AgentExecutor {
 // --- Server Setup ---
 
 const newsResearchAgentCard: AgentCard = {
-  protocolVersion: '1.0',
+  protocolVersion: '0.3.0',
   name: 'News Research Agent',
   description:
     'An agent that conducts comprehensive news research, analyzes current events, and evaluates media credibility across multiple news sources.',
@@ -526,26 +593,65 @@ const newsResearchAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: {},
-  security: [],
-  defaultInputModes: ['text'],
-  defaultOutputModes: ['text'],
+  securitySchemes: {
+    apiKey: {
+      type: 'apiKey',
+      name: 'X-API-Key',
+      in: 'header'
+    }
+  },
+  security: [{
+    apiKey: []
+  }],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
   skills: [
     {
       id: 'news_research',
       name: 'News Research',
       description:
         'Conducts comprehensive news analysis with credibility assessment, current events tracking, and media bias evaluation across diverse news sources.',
-      tags: ['news', 'current-events', 'media', 'credibility'],
+      tags: ['news', 'current-events', 'media', 'credibility', 'journalism'],
       examples: [
         'Research the latest developments in climate policy',
         'Analyze media coverage of recent elections',
         'Track breaking news on international conflicts',
         'Evaluate news credibility on scientific discoveries',
+        'Monitor news trends on social media platforms'
       ],
-      inputModes: ['text'],
-      outputModes: ['text'],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
     },
+    {
+      id: 'credibility_analysis',
+      name: 'Credibility Analysis',
+      description:
+        'Evaluates the credibility and reliability of news sources, checking for bias, fact-checking, and source verification.',
+      tags: ['credibility', 'fact-checking', 'bias', 'verification', 'journalism'],
+      examples: [
+        'Analyze the credibility of this news article',
+        'Check fact claims in recent political news',
+        'Evaluate media bias in election coverage',
+        'Verify the reliability of scientific news sources'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    },
+    {
+      id: 'breaking_news_monitoring',
+      name: 'Breaking News Monitoring',
+      description:
+        'Monitors real-time breaking news developments and provides timely updates on rapidly evolving stories.',
+      tags: ['breaking-news', 'real-time', 'monitoring', 'alerts'],
+      examples: [
+        'Monitor breaking news on natural disasters',
+        'Track real-time election results and reactions',
+        'Follow live updates on international crises',
+        'Monitor news developments on specific topics'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    }
   ],
   supportsAuthenticatedExtendedCard: false,
 };
@@ -571,10 +677,10 @@ async function main() {
   // 5. Start the server
   const PORT = process.env.NEWS_RESEARCH_AGENT_PORT ?? 41246;
   expressApp.listen(PORT, () => {
-    console.log(`[NewsResearchAgent] Server started on http://localhost:${PORT}`);
-    console.log(`[NewsResearchAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
-    console.log('[NewsResearchAgent] Press Ctrl+C to stop the server');
+    flowlogger.info(`[NewsResearchAgent] Server started on http://localhost:${PORT}`);
+    flowlogger.info(`[NewsResearchAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
+    flowlogger.info('[NewsResearchAgent] Press Ctrl+C to stop the server');
   });
 }
 
-main().catch(console.error);
+main().catch((e) => flowlogger.error(e));

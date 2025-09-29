@@ -1,284 +1,94 @@
 import express from "express";
-import { v4 as uuidv4 } from "uuid"; // For generating unique IDs
-
-import type {
-  AgentCard,
-  Task,
-  TaskStatusUpdateEvent,
-  TextPart,
-  Message,
-} from "@a2a-js/sdk";
-import {
-  InMemoryTaskStore,
-  type TaskStore,
-  type AgentExecutor,
-  RequestContext,
-  type ExecutionEventBus,
-  DefaultRequestHandler,
-} from "@a2a-js/sdk/server"; // Import server components
+import type { AgentCard } from "@a2a-js/sdk";
+import { InMemoryTaskStore, type TaskStore, type AgentExecutor, DefaultRequestHandler } from "@a2a-js/sdk/server";
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
-import type { MessageData } from "genkit";
-import { ai } from "./genkit.js";
-
 import * as dotenv from "dotenv";
+import { flowlogger } from "./../../logger.js";
+import { ContentEditorAgentExecutor } from "./executor.js";
+
 dotenv.config();
 
-if (!process.env.GOOGLE_API_KEY) {
-  console.error("GOOGLE_API_KEY environment variable is not set.");
-  throw new Error("GOOGLE_API_KEY environment variable is not set.");
-}
-
-const contentEditorPrompt = ai.prompt("content_editor");
-
-class ContentEditorAgentExecutor implements AgentExecutor {
-  private cancelledTasks = new Set<string>();
-
-  public cancelTask = async (
-    taskId: string,
-    eventBus: ExecutionEventBus,
-  ): Promise<void> => {
-    this.cancelledTasks.add(taskId);
-    // Publish immediate cancellation event
-    const cancelledUpdate: TaskStatusUpdateEvent = {
-      kind: 'status-update',
-      taskId: taskId,
-      contextId: uuidv4(), // Generate context ID for cancellation
-      status: {
-        state: 'canceled',
-        message: {
-          kind: 'message',
-          role: 'agent',
-          messageId: uuidv4(),
-          parts: [{ kind: 'text', text: 'Content editing cancelled.' }],
-          taskId: taskId,
-          contextId: uuidv4(),
-        },
-        timestamp: new Date().toISOString(),
-      },
-      final: true,
-    };
-    eventBus.publish(cancelledUpdate);
-  };
-
-  async execute(
-    requestContext: RequestContext,
-    eventBus: ExecutionEventBus,
-  ): Promise<void> {
-    const {userMessage} = requestContext;
-    const existingTask = requestContext.task;
-
-    const taskId = existingTask?.id || uuidv4();
-    const contextId =
-      userMessage.contextId || existingTask?.contextId || uuidv4();
-
-    console.log(
-      `[ContentEditorAgentExecutor] Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId})`,
-    );
-
-    if (!existingTask) {
-      const initialTask: Task = {
-        kind: "task",
-        id: taskId,
-        contextId: contextId,
-        status: {
-          state: "submitted",
-          timestamp: new Date().toISOString(),
-        },
-        history: [userMessage],
-        // Ensure metadata is never undefined to satisfy Task type
-        metadata: userMessage.metadata ?? {},
-      };
-      eventBus.publish(initialTask);
-    }
-
-    const workingStatusUpdate: TaskStatusUpdateEvent = {
-      kind: "status-update",
-      taskId: taskId,
-      contextId: contextId,
-      status: {
-        state: "working",
-        message: {
-          kind: "message",
-          role: "agent",
-          messageId: uuidv4(),
-          parts: [{ kind: "text", text: "Editing content..." }],
-          taskId: taskId,
-          contextId: contextId,
-        },
-        timestamp: new Date().toISOString(),
-      },
-      final: false,
-    };
-    eventBus.publish(workingStatusUpdate);
-
-    const historyForGenkit = existingTask?.history
-      ? [...existingTask.history]
-      : [];
-    if (!historyForGenkit.find((m) => m.messageId === userMessage.messageId)) {
-      historyForGenkit.push(userMessage);
-    }
-
-    const messages: MessageData[] = historyForGenkit
-      .map((m) => ({
-        role: (m.role === "agent" ? "model" : "user") as "user" | "model",
-        content: m.parts
-          .filter(
-            (p): p is TextPart => p.kind === "text" && !!(p as TextPart).text,
-          )
-          .map((p) => ({
-            text: (p as TextPart).text,
-          })),
-      }))
-      .filter((m) => m.content.length > 0);
-
-    if (messages.length === 0) {
-      console.warn(
-        `[ContentEditorAgentExecutor] No valid text messages found in history for task ${taskId}.`,
-      );
-      const failureUpdate: TaskStatusUpdateEvent = {
-        kind: "status-update",
-        taskId: taskId,
-        contextId: contextId,
-        status: {
-          state: "failed",
-          message: {
-            kind: "message",
-            role: "agent",
-            messageId: uuidv4(),
-            parts: [{ kind: "text", text: "No message found to process." }],
-            taskId: taskId,
-            contextId: contextId,
-          },
-          timestamp: new Date().toISOString(),
-        },
-        final: true,
-      };
-      eventBus.publish(failureUpdate);
-      return;
-    }
-
-    try {
-      const response = await contentEditorPrompt(
-        {},
-        {
-          messages,
-        },
-      );
-
-      if (this.cancelledTasks.has(taskId)) {
-        console.log(
-          `[ContentEditorAgentExecutor] Request cancelled for task: ${taskId}`,
-        );
-
-        const cancelledUpdate: TaskStatusUpdateEvent = {
-          kind: "status-update",
-          taskId: taskId,
-          contextId: contextId,
-          status: {
-            state: "canceled",
-            timestamp: new Date().toISOString(),
-          },
-          final: true,
-        };
-        eventBus.publish(cancelledUpdate);
-        return;
-      }
-
-      const responseText = response.text;
-      console.info(
-        `[ContentEditorAgentExecutor] Prompt response: ${responseText}`,
-      );
-
-      const agentMessage: Message = {
-        kind: "message",
-        role: "agent",
-        messageId: uuidv4(),
-        parts: [{ kind: "text", text: responseText || "Completed." }],
-        taskId: taskId,
-        contextId: contextId,
-      };
-
-      const finalUpdate: TaskStatusUpdateEvent = {
-        kind: "status-update",
-        taskId: taskId,
-        contextId: contextId,
-        status: {
-          state: "completed",
-          message: agentMessage,
-          timestamp: new Date().toISOString(),
-        },
-        final: true,
-      };
-      eventBus.publish(finalUpdate);
-
-      console.log(
-        `[ContentEditorAgentExecutor] Task ${taskId} finished with state: completed`,
-      );
-    } catch (error: unknown) {
-      console.error(
-        `[ContentEditorAgentExecutor] Error processing task ${taskId}:`,
-        error,
-      );
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      const errorUpdate: TaskStatusUpdateEvent = {
-        kind: "status-update",
-        taskId: taskId,
-        contextId: contextId,
-        status: {
-          state: "failed",
-          message: {
-            kind: "message",
-            role: "agent",
-            messageId: uuidv4(),
-            parts: [{ kind: "text", text: `Agent error: ${errorMessage}` }],
-            taskId: taskId,
-            contextId: contextId,
-          },
-          timestamp: new Date().toISOString(),
-        },
-        final: true,
-      };
-      eventBus.publish(errorUpdate);
-    }
+// Runtime guard only outside test; use main logger
+if (process.env.NODE_ENV !== 'test') {
+  const googleKey = process.env.GOOGLE_API_KEY;
+  if (googleKey === undefined || googleKey === '') {
+    flowlogger.error("GOOGLE_API_KEY environment variable is not set.");
+    throw new Error("GOOGLE_API_KEY environment variable is not set.");
   }
 }
 
 const contentEditorAgentCard: AgentCard = {
-  name: "Content Editor Agent (JS)",
-  description: "An agent that can proof-read and polish content.",
-  url: "http://localhost:10003/",
+  protocolVersion: '0.3.0',
+  name: 'Content Editor Agent',
+  description: 'An agent that proof-reads, polishes, and enhances written content with professional editing standards.',
+  url: 'http://localhost:10003/',
   provider: {
-    organization: "A2A Samples",
-    url: "https://example.com/a2a-samples",
+    organization: 'A2A Samples',
+    url: 'https://example.com/a2a-samples',
   },
-  version: "1.0.0",
+  version: '1.0.0',
   capabilities: {
     streaming: true,
     pushNotifications: false,
-    stateTransitionHistory: false,
+    stateTransitionHistory: true,
   },
-  // Provide the expected typed shapes (empty objects) instead of `undefined`
-  // to satisfy exactOptionalPropertyTypes and AgentCard typings.
-  securitySchemes: {},
-  security: [],
-  defaultInputModes: ["text"],
-  defaultOutputModes: ["text"],
+  securitySchemes: {
+    apiKey: {
+      type: 'apiKey',
+      name: 'X-API-Key',
+      in: 'header'
+    }
+  },
+  security: [{
+    apiKey: []
+  }],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
   skills: [
     {
-      id: "editor",
-      name: "Edits content",
-      description: "Edits content by proof-reading and polishing",
-      tags: ["writer"],
+      id: 'content_editing',
+      name: 'Content Editing',
+      description: 'Proof-reads, polishes, and enhances written content with professional editing standards.',
+      tags: ['editing', 'proofreading', 'polishing', 'writing', 'professional'],
       examples: [
-        "Edit the following article, make sure it has a professional tone",
+        'Edit the following article, make sure it has a professional tone',
+        'Proofread this blog post for grammar and clarity',
+        'Polish this technical documentation for better readability',
+        'Enhance this marketing copy for better engagement'
       ],
-      inputModes: ["text"],
-      outputModes: ["text"],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
     },
+    {
+      id: 'style_consistency',
+      name: 'Style Consistency',
+      description: 'Ensures consistent style, tone, and voice throughout documents and content.',
+      tags: ['style', 'consistency', 'tone', 'voice', 'brand'],
+      examples: [
+        'Ensure consistent tone throughout this document',
+        'Apply brand voice guidelines to this content',
+        'Check style consistency across multiple documents',
+        'Maintain consistent terminology and phrasing'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    },
+    {
+      id: 'content_enhancement',
+      name: 'Content Enhancement',
+      description: 'Improves content quality, engagement, and effectiveness through strategic editing and enhancement.',
+      tags: ['enhancement', 'quality', 'engagement', 'effectiveness'],
+      examples: [
+        'Enhance this article for better reader engagement',
+        'Improve the clarity and impact of this technical explanation',
+        'Strengthen the persuasive elements in this marketing content',
+        'Optimize this content for better SEO and readability'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    }
   ],
   supportsAuthenticatedExtendedCard: false,
-  protocolVersion: "1.0",
 };
 
 async function main() {
@@ -291,19 +101,14 @@ async function main() {
   );
 
   const appBuilder = new A2AExpressApp(requestHandler);
-  // Type assertion needed due to Express type compatibility between project and SDK versions
-  const expressApp = appBuilder.setupRoutes(express() as any);
+  const expressApp = appBuilder.setupRoutes(express(), '');
 
-  const PORT = process.env.CONTENT_EDITOR_AGENT_PORT || 10003;
+  const PORT = Number(process.env.CONTENT_EDITOR_AGENT_PORT ?? 10003);
   expressApp.listen(PORT, () => {
-    console.log(
-      `[ContentEditorAgent] Server using new framework started on http://localhost:${PORT}`,
-    );
-    console.log(
-      `[ContentEditorAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`,
-    );
-    console.log("[ContentEditorAgent] Press Ctrl+C to stop the server");
+    flowlogger.info(`[ContentEditorAgent] Server using new framework started on http://localhost:${PORT}`);
+    flowlogger.info(`[ContentEditorAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
+    flowlogger.info("[ContentEditorAgent] Press Ctrl+C to stop the server");
   });
 }
 
-main().catch(console.error);
+main().catch((e) => flowlogger.error(e));

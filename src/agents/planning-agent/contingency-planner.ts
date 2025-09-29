@@ -1,4 +1,5 @@
 import type { ContingencyPlan, RiskFactor, DataSource, ResearchStep } from '../shared/interfaces.js';
+import { flowlogger } from '../../logger.js';
 
 /**
  * Contingency Planning Engine for the Planning Agent
@@ -32,7 +33,7 @@ export class ContingencyPlanner {
 
     // Get recommendations for the planning process
     const recommendations = this.getContingencyRecommendations(optimizedPlans);
-    console.log(`ContingencyPlanner: Generated ${optimizedPlans.length} optimized plans with ${recommendations.length} recommendations`);
+    flowlogger.info(`ContingencyPlanner: Generated ${optimizedPlans.length} optimized plans with ${recommendations.length} recommendations`);
 
     return optimizedPlans;
   }

@@ -7,6 +7,7 @@ import type {
   Task,
   TaskStatusUpdateEvent,
   TextPart,
+  Message,
 } from "@a2a-js/sdk";
 import type {
   TaskStore,
@@ -19,13 +20,14 @@ import {
 } from "@a2a-js/sdk/server";
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
 import { ai } from "./genkit.js";
+import { flowlogger } from "./../../logger.js";
 import type { SearchResult, NewsSearchResult, ScholarSearchResult } from './web-search.js';
 import { WebSearchUtils } from './web-search.js';
 import type { ResearchFinding, SourceCitation, ResearchResult } from '../shared/interfaces.js';
 
-const geminiApiKey = process.env.GEMINI_API_KEY;
-if (typeof geminiApiKey !== 'string' || geminiApiKey.trim() === '') {
-  console.error("GEMINI_API_KEY environment variable not set or empty. Please ensure it is configured.");
+const geminiApiKey = process.env.GEMINI_API_KEY ?? '';
+if (geminiApiKey.trim().length === 0) {
+  flowlogger.error("GEMINI_API_KEY environment variable not set or empty. Please ensure it is configured.");
   process.exit(1);
 }
 
@@ -35,7 +37,7 @@ const webResearchPrompt = ai.prompt('web_research');
 /**
  * WebResearchAgentExecutor implements the agent's core logic for web-based research.
  */
-class WebResearchAgentExecutor implements AgentExecutor {
+export class WebResearchAgentExecutor implements AgentExecutor {
   private cancelledTasks = new Set<string>();
   private webSearch: WebSearchUtils;
 
@@ -81,7 +83,7 @@ class WebResearchAgentExecutor implements AgentExecutor {
     const contextId = (userMessage.contextId ?? existingTask?.contextId) ?? uuidv4();
     const researchId = taskId; // For future orchestration integration
 
-    console.log(
+    flowlogger.info(
       `[WebResearchAgentExecutor] Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId}, research: ${researchId})`
     );
 
@@ -141,7 +143,7 @@ class WebResearchAgentExecutor implements AgentExecutor {
       .filter((m) => m.content.length > 0);
 
     if (messages.length === 0) {
-      console.warn(
+      flowlogger.warn(
         `[WebResearchAgentExecutor] No valid text messages found in history for task ${taskId}.`
       );
       const failureUpdate: TaskStatusUpdateEvent = {
@@ -217,7 +219,7 @@ class WebResearchAgentExecutor implements AgentExecutor {
       }
 
     } catch (error) {
-      console.error(`[WebResearchAgentExecutor] Error processing task ${taskId}:`, error);
+  flowlogger.error({ err: error }, `[WebResearchAgentExecutor] Error processing task ${taskId}`);
       const errorUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
         taskId,
@@ -240,15 +242,15 @@ class WebResearchAgentExecutor implements AgentExecutor {
     }
   }
 
-  private parseResearchFindings({ responseText }: { responseText: string; }): any {
+  private parseResearchFindings({ responseText }: { responseText: string; }): { researchFindings?: unknown } | Record<string, unknown> {
     try {
       // Try to parse JSON response
       const parsed = JSON.parse(responseText.trim());
       // The prompt returns { researchFindings: {...} } so extract the researchFindings
       return parsed.researchFindings ?? parsed;
     } catch (e) {
-      console.error('[WebResearchAgentExecutor] Failed to parse JSON response:', e);
-      console.error('[WebResearchAgentExecutor] Raw response:', responseText);
+      flowlogger.error({ err: e }, '[WebResearchAgentExecutor] Failed to parse JSON response');
+      flowlogger.error({ raw: responseText }, '[WebResearchAgentExecutor] Raw response');
       // Don't use fake fallback - return error information
       throw new Error(`Failed to parse research findings: ${e instanceof Error ? e.message : 'Invalid JSON response'}`);
     }
@@ -257,11 +259,11 @@ class WebResearchAgentExecutor implements AgentExecutor {
   /**
    * Extract research query from user message
    */
-  private extractResearchQuery(userMessage: any): string {
+  private extractResearchQuery(userMessage: Message): string {
     // Extract text content from message parts
-    const textParts = userMessage.parts?.filter((p: any) => p.kind === 'text') as TextPart[] | undefined;
+    const textParts = userMessage.parts?.filter((p): p is TextPart => p.kind === 'text');
     const query = (textParts ?? [])
-      .map((p: TextPart) => p.text)
+      .map((p) => p.text)
       .join(' ').trim();
 
     if (!query) {
@@ -336,7 +338,7 @@ class WebResearchAgentExecutor implements AgentExecutor {
       return this.synthesizeFindings(query, generalResults, newsResults, scholarResults);
 
     } catch (error) {
-      console.error('Web research failed:', error);
+      flowlogger.error({ err: error }, 'Web research failed');
       throw new Error(`Web research failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -447,7 +449,7 @@ class WebResearchAgentExecutor implements AgentExecutor {
 // --- Server Setup ---
 
 const webResearchAgentCard: AgentCard = {
-  protocolVersion: '1.0',
+  protocolVersion: '0.3.0',
   name: 'Web Research Agent',
   description:
     'An agent that conducts comprehensive web-based research with credibility assessment and source verification.',
@@ -456,31 +458,70 @@ const webResearchAgentCard: AgentCard = {
     organization: 'A2A Samples',
     url: 'https://example.com/a2a-samples',
   },
-  version: '0.0.1',
+  version: '0.0.3',
   capabilities: {
     streaming: true,
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: {},
-  security: [],
-  defaultInputModes: ['text'],
-  defaultOutputModes: ['text'],
+  securitySchemes: {
+    apiKey: {
+      type: 'apiKey',
+      name: 'X-API-Key',
+      in: 'header'
+    }
+  },
+  security: [{
+    apiKey: []
+  }],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
   skills: [
     {
       id: 'web_research',
       name: 'Web Research',
       description:
         'Conducts comprehensive web-based research with credibility assessment and source verification.',
-      tags: ['web', 'research', 'credibility', 'sources'],
+      tags: ['web', 'research', 'credibility', 'sources', 'internet'],
       examples: [
         'Research the latest developments in artificial intelligence',
         'Find reliable sources on climate change solutions',
         'Investigate current trends in renewable energy',
+        'Analyze web content on emerging technologies'
       ],
-      inputModes: ['text'],
-      outputModes: ['text'],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
     },
+    {
+      id: 'source_verification',
+      name: 'Source Verification',
+      description:
+        'Verifies the credibility and reliability of web sources, checking for authority, accuracy, and timeliness.',
+      tags: ['verification', 'credibility', 'authority', 'accuracy'],
+      examples: [
+        'Verify the credibility of this website',
+        'Check the authority of scientific web sources',
+        'Validate the timeliness of information on current events',
+        'Assess the reliability of online research sources'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    },
+    {
+      id: 'content_analysis',
+      name: 'Content Analysis',
+      description:
+        'Analyzes web content for key information, trends, and insights across multiple sources.',
+      tags: ['analysis', 'content', 'trends', 'insights'],
+      examples: [
+        'Analyze web content on market trends',
+        'Extract key insights from industry reports',
+        'Summarize web research on technological innovations',
+        'Identify patterns in online discussions'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    }
   ],
   supportsAuthenticatedExtendedCard: false,
 };
@@ -505,6 +546,6 @@ const expressApp = appBuilder.setupRoutes(express(), '');
 const PORT = process.env.WEB_RESEARCH_AGENT_PORT ?? 41243;
 
 expressApp.listen(PORT, () => {
-  console.log(`Web Research Agent listening on port ${PORT}`);
-  console.log(`Agent Card available at http://localhost:${PORT}/.well-known/agent-card.json`);
+  flowlogger.info(`Web Research Agent listening on port ${PORT}`);
+  flowlogger.info(`Agent Card available at http://localhost:${PORT}/.well-known/agent-card.json`);
 });

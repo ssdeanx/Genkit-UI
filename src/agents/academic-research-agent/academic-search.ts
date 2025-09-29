@@ -1,5 +1,5 @@
-/* eslint-disable no-console */
 import { getJson } from 'serpapi';
+import { flowlogger } from '../../logger.js';
 
 /**
  * Academic Search Utilities for the Academic Research Agent
@@ -14,7 +14,7 @@ export class AcademicSearchUtils {
     this.semanticScholarApiKey = (semanticScholarApiKey ?? process.env.SEMANTIC_SCHOLAR_API_KEY) ?? '';
 
     if (!this.serpApiKey) {
-      console.warn('SERPAPI_API_KEY not set. Google Scholar search functionality will be limited.');
+      flowlogger.warn('SERPAPI_API_KEY not set. Google Scholar search functionality will be limited.');
     }
   }
 
@@ -28,15 +28,15 @@ export class AcademicSearchUtils {
         api_key: this.serpApiKey,
         engine: 'google_scholar',
         num: options.limit ?? 10,
-        ...this.buildScholarParams(options)
+        ...this.buildScholarParams(options, query)
       };
 
-      console.log(`Performing Google Scholar search for: "${query}"`);
+      flowlogger.info(`Performing Google Scholar search for: "${query}"`);
       const results = await getJson(searchParams);
 
       return this.parseScholarResults(results, query);
     } catch (error) {
-      console.error('Google Scholar search failed:', error);
+      flowlogger.error({ error }, 'Google Scholar search failed');
       throw new Error(`Google Scholar search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -58,13 +58,13 @@ export class AcademicSearchUtils {
       const queryString = new URLSearchParams(searchParams).toString();
       const url = `http://export.arxiv.org/api/query?${queryString}`;
 
-      console.log(`Performing arXiv search for: "${query}"`);
+      flowlogger.info(`Performing arXiv search for: "${query}"`);
       const response = await fetch(url);
       const xmlText = await response.text();
 
       return this.parseArXivResults(xmlText, query);
     } catch (error) {
-      console.error('arXiv search failed:', error);
+      flowlogger.error({ error }, 'arXiv search failed');
       throw new Error(`arXiv search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -88,7 +88,7 @@ export class AcademicSearchUtils {
       const queryString = new URLSearchParams(searchParams).toString();
       const url = `https://api.semanticscholar.org/graph/v1/paper/search?${queryString}`;
 
-      console.log(`Performing Semantic Scholar search for: "${query}"`);
+      flowlogger.info(`Performing Semantic Scholar search for: "${query}"`);
       const response = await fetch(url, {
         headers: {
           'x-api-key': this.semanticScholarApiKey
@@ -98,7 +98,7 @@ export class AcademicSearchUtils {
       const results = await response.json() as SemanticScholarApiResponse;
       return this.parseSemanticScholarResults(results, query);
     } catch (error) {
-      console.error('Semantic Scholar search failed:', error);
+      flowlogger.error({ error }, 'Semantic Scholar search failed');
       // Don't fail completely if Semantic Scholar is not available
       return {
         query,
@@ -140,7 +140,7 @@ export class AcademicSearchUtils {
       }
     } catch (error) {
       // Semantic Scholar errors are less critical
-      console.warn('Semantic Scholar search failed:', error);
+      flowlogger.warn({ error }, 'Semantic Scholar search failed');
     }
 
     // Remove duplicates based on title similarity
@@ -170,8 +170,9 @@ export class AcademicSearchUtils {
   /**
    * Build Google Scholar search parameters
    */
-  private buildScholarParams(options: ScholarSearchOptions): Record<string, string | number> {
+  private buildScholarParams(options: ScholarSearchOptions, baseQuery: string): Record<string, string | number> {
     const params: Record<string, string | number> = {};
+    let q = baseQuery;
 
     if (options.yearFrom) {
       params.as_ylo = options.yearFrom;
@@ -182,14 +183,14 @@ export class AcademicSearchUtils {
     }
 
     if (options.author) {
-      params.q = (params.q as string || '') + ` author:"${options.author}"`;
+      q += ` author:"${options.author}"`;
     }
 
     if (options.venue) {
-      params.q = (params.q as string || '') + ` source:"${options.venue}"`;
+      q += ` source:"${options.venue}"`;
     }
 
-    return params;
+    return { ...params, q };
   }
 
   /**

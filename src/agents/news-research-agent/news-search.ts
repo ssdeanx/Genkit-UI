@@ -1,4 +1,5 @@
 import { getJson } from 'serpapi';
+import { flowlogger } from '../../logger.js';
 
 /**
  * News Search Utilities for the News Research Agent
@@ -13,7 +14,7 @@ export class NewsSearchUtils {
     this.newsApiKey = newsApiKey ?? process.env.NEWSAPI_API_KEY;
 
     if (!this.serpApiKey) {
-      console.warn('SERPAPI_API_KEY not set. Google News search functionality will be limited.');
+      flowlogger.warn('SERPAPI_API_KEY not set. Google News search functionality will be limited.');
     }
   }
 
@@ -30,12 +31,12 @@ export class NewsSearchUtils {
         ...this.buildGoogleNewsParams(options)
       };
 
-      console.log(`Performing Google News search for: "${query}"`);
+      flowlogger.info(`Performing Google News search for: "${query}"`);
       const results = await getJson(searchParams);
 
       return this.parseGoogleNewsResults(results, query);
     } catch (error) {
-      console.error('Google News search failed:', error);
+      flowlogger.error({ error }, 'Google News search failed');
       throw new Error(`Google News search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -57,21 +58,30 @@ export class NewsSearchUtils {
         sortBy: options.sortBy ?? 'publishedAt'
       });
 
-      if (options.from) {
-        searchParams.append('from', options.from);
+      // Explicitly handle nullable/empty 'from' and 'to' values
+      const from = options.from?.trim();
+      if (typeof from === 'string' && from.length > 0) {
+        searchParams.append('from', from);
       }
 
-      if (options.to) {
-        searchParams.append('to', options.to);
+      const to = options.to?.trim();
+      if (typeof to === 'string' && to.length > 0) {
+        searchParams.append('to', to);
       }
 
-      if (options.sources) {
-        searchParams.append('sources', options.sources.join(','));
+      // Validate and sanitize sources array before appending
+      if (Array.isArray(options.sources) && options.sources.length > 0) {
+        const sanitized = options.sources
+          .map(s => (s ?? '').trim())
+          .filter(s => s.length > 0);
+        if (sanitized.length > 0) {
+          searchParams.append('sources', sanitized.join(','));
+        }
       }
 
       const url = `https://newsapi.org/v2/everything?${searchParams.toString()}`;
 
-      console.log(`Performing NewsAPI search for: "${query}"`);
+      flowlogger.info(`Performing NewsAPI search for: "${query}"`);
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -86,7 +96,7 @@ export class NewsSearchUtils {
 
       return this.parseNewsAPIResults(results, query);
     } catch (error) {
-      console.error('NewsAPI search failed:', error);
+      flowlogger.error({ error }, 'NewsAPI search failed');
       // Don't fail completely if NewsAPI is not available
       return {
         query,
@@ -132,7 +142,7 @@ export class NewsSearchUtils {
       }
     } catch (error) {
       // NewsAPI errors are less critical
-      console.warn('NewsAPI search failed:', error);
+      flowlogger.warn({ error }, 'NewsAPI search failed');
     }
 
     // Remove duplicates based on URL similarity
@@ -174,12 +184,12 @@ export class NewsSearchUtils {
         ...this.buildTrendingParams(options)
       };
 
-      console.log('Fetching trending news topics');
+      flowlogger.info('Fetching trending news topics');
       const results = await getJson(searchParams);
 
       return this.parseTrendingResults(results);
     } catch (error) {
-      console.error('Trending topics fetch failed:', error);
+      flowlogger.error({ error }, 'Trending topics fetch failed');
       throw new Error(`Trending topics fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -199,12 +209,16 @@ export class NewsSearchUtils {
       }
     }
 
-    if (options.location) {
-      params.location = options.location;
+    // Validate location explicitly (handle nullish and empty strings)
+    const location = typeof options.location === 'string' ? options.location.trim() : '';
+    if (location.length > 0) {
+      params.location = location;
     }
 
-    if (options.language) {
-      params.hl = options.language;
+    // Explicitly validate language to avoid nullable string conditional
+    const language = typeof options.language === 'string' ? options.language.trim() : '';
+    if (language.length > 0) {
+      params.hl = language;
     }
 
     return params;
@@ -216,12 +230,16 @@ export class NewsSearchUtils {
   private buildTrendingParams(options: TrendingOptions): Record<string, any> {
     const params: Record<string, any> = {};
 
-    if (options.region) {
-      params.location = options.region;
+    // Validate region explicitly (handle nullish and empty strings)
+    const region = typeof options.region === 'string' ? options.region.trim() : '';
+    if (region.length > 0) {
+      params.location = region;
     }
 
-    if (options.language) {
-      params.hl = options.language;
+    // Explicitly validate language to avoid nullable string conditional
+    const language = typeof options.language === 'string' ? options.language.trim() : '';
+    if (language.length > 0) {
+      params.hl = language;
     }
 
     return params;
@@ -276,16 +294,21 @@ export class NewsSearchUtils {
   private parseTrendingResults(results: any): TrendingResult {
     const topics: TrendingTopic[] = (results.news_results ?? [])
       .slice(0, 10) // Limit to top 10
-      .map((topic: any, index: number) => ({
-        title: topic.title,
-        searchInterest: Math.max(1, 10 - index), // Simple ranking based on position
-        relatedStories: topic.stories?.length ?? 0,
-        topStory: (topic.stories?.[0]) ? {
-          title: topic.stories[0].title,
-          url: topic.stories[0].link,
-          source: topic.stories[0].source
-        } : undefined
-      }));
+      .map((topic: any, index: number) => {
+        // Explicitly check that stories is an array and has at least one item
+        const hasStories = Array.isArray(topic.stories) && topic.stories.length > 0;
+
+        return {
+          title: topic.title,
+          searchInterest: Math.max(1, 10 - index), // Simple ranking based on position
+          relatedStories: Array.isArray(topic.stories) ? topic.stories.length : 0,
+          topStory: hasStories ? {
+            title: topic.stories[0]?.title ?? '',
+            url: topic.stories[0]?.link ?? '',
+            source: topic.stories[0]?.source ?? ''
+          } : undefined
+        };
+      });
 
     return {
       topics,
@@ -325,29 +348,47 @@ export class NewsSearchUtils {
       'bbc', 'reuters', 'ap', 'nyt', 'washingtonpost', 'guardian',
       'wsj', 'ft', 'economist', 'cnn', 'npr', 'pbs'
     ];
-    const source = article.source?.toLowerCase() ?? '';
+    const source = typeof article.source === 'string' ? article.source.toLowerCase() : '';
     if (reputableSources.some(rep => Boolean(source.includes(rep)))) {
       score += 0.3;
       factors.push('reputable news source');
     }
 
     // Recent publication (very important for news)
-    if (article.published) {
-      const daysSincePublished = (Date.now() - new Date(article.published).getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSincePublished < 1) {
-        score += 0.3;
-        factors.push('very recent (< 1 day)');
-      } else if (daysSincePublished < 3) {
-        score += 0.2;
-        factors.push('recent (< 3 days)');
-      } else if (daysSincePublished < 7) {
-        score += 0.1;
-        factors.push('recent (< 1 week)');
+    // Normalize possible publication fields explicitly and validate date
+    let publishedIso: string | undefined;
+    if (typeof article.published === 'string' && article.published.trim().length > 0) {
+      publishedIso = article.published.trim();
+    } else if (article.published instanceof Date) {
+      publishedIso = article.published.toISOString();
+    } else if (typeof article.publishedAt === 'string' && article.publishedAt.trim().length > 0) {
+      publishedIso = article.publishedAt.trim();
+    } else if (typeof article.publishedAt === 'number' && Number.isFinite(article.publishedAt)) {
+      publishedIso = new Date(article.publishedAt).toISOString();
+    } else if (typeof article.published === 'number' && Number.isFinite(article.published)) {
+      publishedIso = new Date(article.published).toISOString();
+    }
+
+    // Explicitly check for a non-empty string and validate parsed date
+    if (typeof publishedIso === 'string' && publishedIso.trim().length > 0) {
+      const parsedTime = Date.parse(publishedIso);
+      if (!Number.isNaN(parsedTime) && Number.isFinite(parsedTime)) {
+        const daysSincePublished = (Date.now() - parsedTime) / (1000 * 60 * 60 * 24);
+        if (daysSincePublished < 1) {
+          score += 0.3;
+          factors.push('very recent (< 1 day)');
+        } else if (daysSincePublished < 3) {
+          score += 0.2;
+          factors.push('recent (< 3 days)');
+        } else if (daysSincePublished < 7) {
+          score += 0.1;
+          factors.push('recent (< 1 week)');
+        }
       }
     }
 
-    // Content quality indicators
-    if ((Boolean(article.snippet)) && article.snippet.length > 200) {
+    // Content quality indicators - ensure snippet is a string before checking length
+    if (typeof article.snippet === 'string' && article.snippet.length > 200) {
       score += 0.1;
       factors.push('detailed content');
     }

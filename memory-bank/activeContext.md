@@ -1,38 +1,64 @@
 # Active Context — Genkit-UI
 
-Date: 2025-09-28
+Date: 2025-09-29
 
-Current focus
+## Current Work Focus
 
-- A2A protocol alignment for orchestrator and shared interfaces (v0.3.x)
-- Keep flows and orchestrator tests green with 100% coverage on flows
+**Session Status**: Session concluding. All work for this session is complete. Memory Bank is being updated with the final state.
 
-Recent changes
+**Completed Work**:
 
-- Updated orchestrator AgentCard.protocolVersion to `0.3.0`
-- Aliased local `AgentCard` type to `@a2a-js/sdk` AgentCard to avoid drift
-- Introduced optional A2AClient transport in `A2ACommunicationManager` (guarded by `USE_A2A_CLIENT`)
-- Added unit test for sendTaskStream fallback path (no A2A client); validates synthetic message emission
-- All tests passing (84/84); flows remain at 100% coverage
+- **Coder Agent (`TASK009`)**: The `coder` agent's executor and tests have been fully refactored and fixed. A resilient fallback mechanism was added to ensure the agent completes tasks even when AI generation fails. All tests for the `coder` agent are now passing.
+- **Content-Editor Agent**: After several incorrect attempts, the user has corrected the implementation. The `content-editor` agent's executor now correctly uses DotPrompts, and its tests are passing.
+- **A2A Testing Architecture (`DESIGN001`, `REQ001`, `REQ002`)**: Formal design and requirements were created to document the resilient testing patterns established for A2A agents.
 
-Authoritative patterns observed (from @a2a-js/sdk)
+**Remaining Work**:
 
-- A2AExpressApp uses a single POST endpoint that returns JSON or SSE when the handler yields an AsyncGenerator.
-- Client supports:
-  - `sendMessage` (message/send)
-  - streaming via `sendMessageStream` (message/stream) yielding Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
-  - `cancelTask` (tasks/cancel) and `resubscribeTask` (tasks/resubscribe)
-  - Push notification config CRUD (set/get/list/delete)
-- ExecutionEventQueue stops on final=true TaskStatusUpdateEvent or a Message event.
+- **`TASK008`**: Complete A2A implementation (streaming, error handling, security) remains in progress but is paused at the end of this session.
+- **`TASK004`**: CI link validation setup is still pending.
 
-Decisions
+## Session Update — 2025-09-29
 
-- Keep our existing fetch-based path as default; add JSON-RPC transport behind env flags to avoid breaking tests.
-- Treat streamed items defensively; convert to our local progress updates and publish to StreamingHandler.
-- Defer push notifications until after streaming is stable.
+- **Session End**: This session is now complete.
+- **Test Status**: All tests for `coder` and `content-editor` agents are now passing. The `orchestrator` agent was not addressed in this session.
+- **Memory Bank**: The Memory Bank has been updated to reflect the final state of this session's work. The `coder` agent fix and the user's correction of the `content-editor` agent are now documented.
 
-Next steps
+### A2A Agent URLs (source of truth)
 
-- Wire streaming path (`sendMessageStream`) into orchestrator’s task delegation for real-time updates (guarded by env)
-- Implement proper cancel semantics via `tasks/cancel`; publish final canceled status
-- Consider enabling push notifications in AgentCard and client config
+Moved to docs/a2a.md. This Memory Bank intentionally does not duplicate URLs. See that file for the live list and documentation links.
+
+## Architecture Overview
+
+**Dual Backend Architecture**:
+
+- **Genkit Flows** ([src/flows/](../src/flows/)): HTTP-exposed flows via [flowServer.ts](../src/flowServer.ts) (port 3400) and Firebase Functions ([functions/](../functions/))
+- **A2A Agents** ([src/agents/](../src/agents/)): 8 specialized agents using @a2a-js/sdk for inter-agent communication
+- **Toolbox Integration**: Local PostgreSQL-based toolbox with 7 tools running via Docker Compose
+- **Deployment**: Firebase App Hosting for backend flows, Functions for serverless execution
+
+**Key Components**:
+
+- Main [src/config.ts](../src/config.ts): Genkit with Gemini 2.5 Flash, vectorstore, advanced model config
+- Functions [functions/src/config.ts](../functions/src/config.ts): Firebase-optimized Genkit setup with telemetry
+- CLI [src/cli.ts](../src/cli.ts): A2A client for agent interaction
+- Toolbox [src/config/toolbox.ts](../src/config/toolbox.ts): Integration with local toolbox server
+
+## Decisions
+
+- Maintain dual architecture: flows for direct HTTP calls, agents for complex orchestration
+- Use Firebase for production deployment with App Hosting + Functions
+- Keep toolbox local for development with Docker Compose
+- Complete A2A protocol implementation across all agents
+- Focus on streaming and error handling for production readiness
+
+## Next Steps
+
+- Complete A2A streaming implementation
+- Add comprehensive error handling with A2A error codes
+- Implement security middleware for agents
+- Set up CI link validation
+- Test full agent orchestration flows
+- Implement complete task lifecycle management with proper status updates
+- Add streaming support to agent executors using ExecutionEventBus
+- Enhance error handling with A2A-specific error codes and structured responses
+- Update agent servers to use A2AExpressApp pattern with proper middleware
