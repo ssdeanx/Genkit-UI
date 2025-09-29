@@ -689,7 +689,7 @@ async function main() {
   const expressApp = appBuilder.setupRoutes(express(), '');
 
   // 5. Start the server
-  const PORT = process.env.PLANNING_AGENT_PORT ?? 41245;
+  const PORT = process.env.PLANNING_AGENT_PORT ?? 41244;
   expressApp.listen(PORT, () => {
     flowlogger.info(`[PlanningAgent] Server started on http://localhost:${PORT}`);
     flowlogger.info(`[PlanningAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);

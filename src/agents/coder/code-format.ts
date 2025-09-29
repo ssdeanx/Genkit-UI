@@ -1,4 +1,4 @@
-import type { GenkitBeta} from "genkit/beta";
+import type { GenkitBeta } from "genkit/beta";
 import { z } from "genkit/beta";
 
 export const CodeMessageSchema = z.object({
@@ -51,38 +51,41 @@ export class CodeMessage implements CodeMessageData {
   }
 }
 
-function extractCode(source: string): CodeMessageData {
+export function extractCode(source: string): CodeMessageData {
   const files: CodeMessageData["files"] = [];
-  let currentPreamble = "";
-  let postamble = "";
-
   const lines = source.split("\n");
   let inCodeBlock = false;
+  let currentFileIndex = -1;
+  const codeBlockPositions: Array<{start: number, end: number, fileIndex: number}> = [];
 
+  // First pass: identify all code blocks and their positions
   for (let i = 0; i < lines.length; i++) {
-    // Ensure `line` is always a string to avoid "possibly undefined" errors.
-    const line = lines[i] ?? "";
+    const line = lines[i]!;
     const trimmedLine = line.trim();
 
     if (trimmedLine.startsWith("```")) {
       if (!inCodeBlock) {
         // Starting a new code block
         inCodeBlock = true;
-        // Extract language and filename
+        currentFileIndex++;
         const [language, filename] = trimmedLine.substring(3).split(" ");
-        // Start a new file entry
         files.push({
-          preamble: currentPreamble.trim(),
+          preamble: "",
           filename,
           language,
           content: "",
           done: false,
         });
-        currentPreamble = "";
+        codeBlockPositions.push({start: i, end: -1, fileIndex: currentFileIndex});
       } else {
         // Ending a code block
         inCodeBlock = false;
-        // Mark the current file as done (guarded)
+        if (codeBlockPositions.length > 0) {
+          const lastPos = codeBlockPositions[codeBlockPositions.length - 1];
+          if (lastPos) {
+            lastPos.end = i;
+          }
+        }
         if (files.length > 0) {
           const last = files[files.length - 1];
           if (last) {
@@ -90,42 +93,36 @@ function extractCode(source: string): CodeMessageData {
           }
         }
       }
-      continue;
+    } else if (inCodeBlock && currentFileIndex >= 0) {
+      // Add to current file's content
+      const file = files[currentFileIndex];
+      if (file) {
+        file.content += line + "\n";
+      }
     }
-
-    if (inCodeBlock) {
-          // Add to the current file's content (guarded)
-          if (files.length > 0) {
-            const last = files[files.length - 1];
-            if (last) {
-              last.content += line + "\n";
-            }
-          }
-        }
-    else if (files.length > 0) {
-            const last = files[files.length - 1];
-            // Explicitly handle nullable/empty string for last.content per coding rules.
-            // Treat non-empty trimmed content as indicating postamble; otherwise treat as preamble.
-            if (
-              last &&
-              typeof last.content === "string" &&
-              last.content.trim().length > 0
-            ) {
-              postamble += line + "\n";
-            } else {
-              // Otherwise this is preamble for the next file
-              currentPreamble += line + "\n";
-            }
-          }
-    else {
-            // No files yet; still preamble
-            currentPreamble += line + "\n";
-          }
   }
+
+  // Second pass: assign preambles and postamble
+  let lastProcessedLine = 0;
+  for (let i = 0; i < codeBlockPositions.length; i++) {
+    const pos = codeBlockPositions[i];
+    if (pos) {
+      const file = files[pos.fileIndex];
+      if (file) {
+        // Text before this code block is preamble for this file
+        const preambleLines = lines.slice(lastProcessedLine, pos.start);
+        file.preamble = preambleLines.join('\n').trim();
+        lastProcessedLine = pos.end + 1;
+      }
+    }
+  }
+
+  // Everything after the last code block is postamble (only if there were code blocks)
+  const postamble = codeBlockPositions.length > 0 ? lines.slice(lastProcessedLine).join('\n').trim() : '';
 
   return {
     files,
-    postamble: postamble.trim(),
+    postamble,
   };
 }
 

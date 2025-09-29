@@ -212,9 +212,13 @@ export class ProgressTracker {
    * Extract research ID from step ID (assumes format: researchId-stepId)
    */
   private extractResearchIdFromStepId(stepId: string): string {
-    // This is a simple implementation - in practice, you might want a more robust way
-    // to associate steps with research IDs
-    return stepId.split('-')[0] ?? 'unknown';
+    // Extract research ID by removing the step suffix (e.g., 'test-research-step1' -> 'test-research')
+    const parts = stepId.split('-');
+    if (parts.length >= 3 && parts[parts.length - 2] === 'step') {
+      return parts.slice(0, -2).join('-');
+    }
+    // Fallback: assume research ID is everything before the last '-'
+    return parts.slice(0, -1).join('-') || 'unknown';
   }
 
   /**

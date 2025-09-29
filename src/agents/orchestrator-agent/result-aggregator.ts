@@ -56,22 +56,26 @@ export class ResultAggregator {
   /**
    * Extract all sources from research step results
    */
-  private extractAllSources(results: ResearchStepResult[]): SourceCitation[] {
-    const allSources: SourceCitation[] = [];
-
-    for (const result of results) {
-      if (Array.isArray(result.sources)) {
-        allSources.push(...result.sources);
-      }
+  extractAllSources(results: ResearchStepResult[]): SourceCitation[] {
+    if (results.length === 0) {
+      return [];
     }
 
+    const allSources: SourceCitation[] = [];
+    for (const res of results) {
+      if (Array.isArray(res.sources) && res.sources.length > 0) {
+        for (const s of res.sources) {
+          allSources.push(s);
+        }
+      }
+    }
     return allSources;
   }
 
   /**
    * Deduplicate sources based on URL similarity and content
    */
-  private deduplicateSources(sources: SourceCitation[]): SourceCitation[] {
+  protected deduplicateSources(sources: SourceCitation[]): SourceCitation[] {
     const deduplicated: SourceCitation[] = [];
     const seen = new Set<string>();
 
@@ -420,7 +424,7 @@ export class ResultAggregator {
 
     const similarity = intersection.size / union.size;
 
-    return similarity > 0.6; // 60% word overlap threshold
+    return similarity > 0.4; // 40% word overlap threshold
   }
 
   /**
@@ -521,7 +525,7 @@ export class ResultAggregator {
   /**
    * Calculate overall confidence for the aggregated result
    */
-  private calculateOverallConfidence(results: ResearchStepResult[]): number {
+  protected calculateOverallConfidence(results: ResearchStepResult[]): number {
     if (results.length === 0) {
       return 0;
     }

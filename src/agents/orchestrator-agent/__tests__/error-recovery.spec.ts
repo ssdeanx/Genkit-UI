@@ -4,7 +4,7 @@ import type { TaskDelegator } from '../task-delegator.js';
 import { ErrorRecovery } from '../error-recovery.js';
 
 // Mock the logger
-vi.mock('./logger.js', () => ({
+vi.mock('../../logger.js', () => ({
   log: vi.fn(),
 }));
 

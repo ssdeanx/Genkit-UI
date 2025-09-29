@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StreamingHandler } from '../streaming-handler.js';
 import type {
   OrchestrationState,
@@ -9,7 +9,7 @@ import type {
 } from '../../shared/interfaces.js';
 
 // Mock the logger
-vi.mock('./logger.js', () => ({
+vi.mock('../../logger.js', () => ({
   log: vi.fn(),
 }));
 

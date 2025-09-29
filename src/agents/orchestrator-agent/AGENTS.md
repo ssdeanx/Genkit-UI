@@ -39,7 +39,7 @@ This agent serves as the central coordinator for the Deep Research Agent system,
 
 ```bash
 # From the project root
-npm run agents:orchestrator-agent
+npm run agents:orchestrator
 ```
 
 ### Testing with CLI

@@ -543,7 +543,7 @@ const requestHandler = new DefaultRequestHandler(
 const appBuilder = new A2AExpressApp(requestHandler);
 const expressApp = appBuilder.setupRoutes(express(), '');
 
-const PORT = process.env.WEB_RESEARCH_AGENT_PORT ?? 41243;
+const PORT = process.env.WEB_RESEARCH_AGENT_PORT ?? 41248;
 
 expressApp.listen(PORT, () => {
   flowlogger.info(`Web Research Agent listening on port ${PORT}`);

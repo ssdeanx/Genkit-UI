@@ -8,24 +8,19 @@ This sample agent can be used to proof-read and polish content. The provided sam
 
 ## Running the Sample
 
-1. Navigate to the samples directory:
-
-    ```bash
-    cd samples/js
-    ```
-
-2. Create an environment file with your API key:
+1. From the project root, create an environment file with your API key:
 
    ```bash
-   echo "GOOGLE_API_KEY=your_api_key_here" > .env
+   echo "GEMINI_API_KEY=your_api_key_here" > .env
    ```
 
-3. Run npm install:
+2. Install dependencies from the project root:
+
     ```bash
     npm install
     ```
 
-4. Run the Content Editor Agent
+3. Run the Content Editor Agent
 
    **NOTE:**
    By default, the agent will start on port 10003. To override this, use `export CONTENT_EDITOR_AGENT_PORT=YOUR_PORT`.
@@ -34,13 +29,11 @@ This sample agent can be used to proof-read and polish content. The provided sam
    npm run agents:content-editor
    ```
 
-5. In a separate terminal, run the A2A client and use it to send a message to the agent:
+4. In a separate terminal, run the A2A client and use it to send a message to the agent:
 
    ```bash
-   npm run a2a:cli
+   npm run a2a:cli http://localhost:10003
    ```
-
-6. To make use of this agent in a content creation multi-agent system, check out the [content_creation](../../../../python/hosts/content_creation/README.md) sample.
 
 ## Disclaimer
 Important: The sample code provided is for demonstration purposes and illustrates the

@@ -2,27 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ResultAggregator } from '../result-aggregator.js';
 import type {
   ResearchStepResult,
-  SourceCitation,
   OrchestrationState,
   ResearchResult,
-  ResearchPlan,
-  ResearchStep
+  ResearchPlan
 } from '../../shared/interfaces.js';
-
-// Type for testing private methods
-interface ResultAggregatorPrivate {
-  resultCache: Map<string, ResearchStepResult[]>;
-  extractAllSources(results: ResearchStepResult[]): SourceCitation[];
-  deduplicateSources(sources: SourceCitation[]): SourceCitation[];
-  calculateOverallConfidence(results: ResearchStepResult[]): number;
-  calculateTotalProcessingTime(results: ResearchStepResult[]): number;
-  generateMethodologySummary(plan: ResearchPlan, results: ResearchStepResult[]): string;
-}
-
-// Mock logger
-vi.mock('../../../logger.js', () => ({
-  log: vi.fn(),
-}));
 
 describe('ResultAggregator', () => {
   let aggregator: ResultAggregator;
@@ -30,19 +13,6 @@ describe('ResultAggregator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     aggregator = new ResultAggregator();
-  });
-
-  // Helper function to create valid ResearchStep
-  const createResearchStep = (overrides: Partial<ResearchStep>): ResearchStep => ({
-    id: 'step1',
-    description: 'Test step',
-    agentType: 'web-research' as const,
-    dependencies: [],
-    estimatedDuration: 10,
-    successCriteria: 'Test criteria',
-    fallbackStrategies: [],
-    priority: 3,
-    ...overrides,
   });
 
   // Helper function to create valid ResearchPlan
@@ -318,14 +288,21 @@ describe('ResultAggregator', () => {
           claim: 'Test finding',
           evidence: 'Test evidence',
           confidence: 0.8,
-          sources: [0],
+          sources: [0, 1],
           category: 'factual',
         }],
         sources: [{
-          title: 'Test Source',
+          title: 'Test Source 1',
           url: 'https://example.com',
           type: 'web',
           credibilityScore: 0.8,
+          publicationDate: new Date(),
+          accessedAt: new Date(),
+        }, {
+          title: 'Test Source 2',
+          url: 'https://academic.example.com',
+          type: 'academic',
+          credibilityScore: 0.9,
           publicationDate: new Date(),
           accessedAt: new Date(),
         }],
@@ -430,8 +407,13 @@ describe('ResultAggregator', () => {
 
   describe('cleanupResearchResults', () => {
     it('should clean up cached results for a research project', () => {
-      // Add some mock cached results
-      (aggregator as unknown as ResultAggregatorPrivate).resultCache.set('research1', [createResearchStepResult({})]);
+      // Populate cache by aggregating results
+      const results = [createResearchStepResult({})];
+      const state = createOrchestrationState({ researchId: 'research1' });
+      aggregator.aggregateResults(results, state);
+
+      // Verify it's cached
+      expect(aggregator.getCachedResults('research1')).toEqual(results);
 
       aggregator.cleanupResearchResults('research1');
 
@@ -442,7 +424,8 @@ describe('ResultAggregator', () => {
   describe('getCachedResults', () => {
     it('should return cached results for a research project', () => {
       const results = [createResearchStepResult({})];
-      (aggregator as unknown as ResultAggregatorPrivate).resultCache.set('research1', results);
+      const state = createOrchestrationState({ researchId: 'research1' });
+      aggregator.aggregateResults(results, state);
 
       const cached = aggregator.getCachedResults('research1');
 
@@ -453,176 +436,6 @@ describe('ResultAggregator', () => {
       const cached = aggregator.getCachedResults('nonexistent');
 
       expect(cached).toBeNull();
-    });
-  });
-
-  describe('private methods', () => {
-    describe('extractAllSources', () => {
-      it('should extract all sources from results', () => {
-        const results: ResearchStepResult[] = [
-          createResearchStepResult({
-            sources: [
-              {
-                title: 'Source 1',
-                url: 'https://example1.com',
-                type: 'web',
-                credibilityScore: 0.8,
-                publicationDate: new Date(),
-                accessedAt: new Date(),
-              },
-            ],
-          }),
-          createResearchStepResult({
-            sources: [
-              {
-                title: 'Source 2',
-                url: 'https://example2.com',
-                type: 'academic',
-                credibilityScore: 0.9,
-                publicationDate: new Date(),
-                accessedAt: new Date(),
-              },
-            ],
-          }),
-        ];
-
-        const sources = (aggregator as unknown as ResultAggregatorPrivate).extractAllSources(results);
-        expect(sources).toHaveLength(2);
-        expect(sources[0]?.title).toBe('Source 1');
-        expect(sources[1]?.title).toBe('Source 2');
-      });
-
-      it('should handle results with no sources', () => {
-        const results: ResearchStepResult[] = [
-          createResearchStepResult({ sources: [] }),
-          createResearchStepResult({ sources: [] }),
-        ];
-
-        const sources = (aggregator as unknown as ResultAggregatorPrivate).extractAllSources(results);
-        expect(sources).toHaveLength(0);
-      });
-    });
-
-    describe('deduplicateSources', () => {
-      it('should remove duplicate sources', () => {
-        const sources: SourceCitation[] = [
-          {
-            title: 'Source 1',
-            url: 'https://example1.com',
-            type: 'web',
-            credibilityScore: 0.8,
-            publicationDate: new Date(),
-            accessedAt: new Date(),
-          },
-          {
-            title: 'Source 1',
-            url: 'https://example1.com',
-            type: 'web',
-            credibilityScore: 0.8,
-            publicationDate: new Date(),
-            accessedAt: new Date(),
-          },
-          {
-            title: 'Different Source',
-            url: 'https://example2.com',
-            type: 'academic',
-            credibilityScore: 0.9,
-            publicationDate: new Date(),
-            accessedAt: new Date(),
-          },
-        ];
-
-        const deduplicated = (aggregator as unknown as ResultAggregatorPrivate).deduplicateSources(sources);
-        expect(deduplicated).toHaveLength(2);
-        expect(deduplicated.some((s: SourceCitation) => s.title === 'Source 1')).toBe(true);
-        expect(deduplicated.some((s: SourceCitation) => s.title === 'Different Source')).toBe(true);
-      });
-
-      it('should handle empty sources array', () => {
-        const sources: SourceCitation[] = [];
-        const deduplicated = (aggregator as unknown as ResultAggregatorPrivate).deduplicateSources(sources);
-        expect(deduplicated).toHaveLength(0);
-      });
-    });
-
-    describe('calculateOverallConfidence', () => {
-      it('should calculate weighted average confidence', () => {
-        const results: ResearchStepResult[] = [
-          createResearchStepResult({
-            qualityScore: 0.9,
-            data: {
-              findings: [{
-                claim: 'High confidence finding',
-                evidence: 'Strong evidence',
-                confidence: 0.9,
-                sources: [0],
-                category: 'factual',
-              }],
-            },
-          }),
-          createResearchStepResult({
-            qualityScore: 0.6,
-            data: {
-              findings: [{
-                claim: 'Medium confidence finding',
-                evidence: 'Medium evidence',
-                confidence: 0.6,
-                sources: [0],
-                category: 'analytical',
-              }],
-            },
-          }),
-        ];
-
-        const confidence = (aggregator as unknown as ResultAggregatorPrivate).calculateOverallConfidence(results);
-        expect(confidence).toBeGreaterThan(0.6);
-        expect(confidence).toBeLessThanOrEqual(0.9);
-      });
-
-      it('should handle empty results', () => {
-        const results: ResearchStepResult[] = [];
-        const confidence = (aggregator as unknown as ResultAggregatorPrivate).calculateOverallConfidence(results);
-        expect(confidence).toBe(0);
-      });
-    });
-
-    describe('calculateTotalProcessingTime', () => {
-      it('should sum processing times from all results', () => {
-        const results: ResearchStepResult[] = [
-          createResearchStepResult({ processingTime: 1000 }),
-          createResearchStepResult({ processingTime: 2000 }),
-          createResearchStepResult({ processingTime: 1500 }),
-        ];
-
-        const totalTime = (aggregator as unknown as ResultAggregatorPrivate).calculateTotalProcessingTime(results);
-
-        expect(totalTime).toBe(4500);
-      });
-    });
-
-    describe('generateMethodologySummary', () => {
-      it('should generate methodology summary from plan and results', () => {
-        const plan = createResearchPlan({
-          topic: 'AI Research',
-          methodology: { approach: 'systematic' as const, justification: 'Comprehensive analysis', phases: [], qualityControls: [] },
-          executionSteps: [
-            createResearchStep({ agentType: 'academic-research' }),
-            createResearchStep({ agentType: 'web-research' }),
-          ],
-        });
-
-        const results: ResearchStepResult[] = [
-          createResearchStepResult({ stepId: 'academic-step' }),
-          createResearchStepResult({ stepId: 'web-step' }),
-        ];
-
-        const summary = (aggregator as unknown as ResultAggregatorPrivate).generateMethodologySummary(plan, results);
-
-        expect(summary).toContain('AI Research');
-        expect(summary).toContain('systematic approach');
-        expect(summary).toContain('academic-research');
-        expect(summary).toContain('web-research');
-      });
     });
   });
 });

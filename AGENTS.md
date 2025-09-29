@@ -71,7 +71,7 @@ Key technologies: TypeScript ^5.9.2, Genkit ^1.20.0, @a2a-js/sdk ^0.3.4, Zod ^4.
 
 - Start Genkit UI (flows/tools testing): `npm run genkit:ui` – watches `src/index.ts`, serves at localhost:3000.
 - Start local flow server (HTTP): `npm run flow:serve` (port: env FLOW_PORT or 3400).
-- Start individual agent servers: e.g. `npm run agents:orchestrator` (port 41243), `npm run agents:planning` (41244), `npm run agents:academic` (41245), `npm run agents:news` (41246), `npm run agents:data-analysis` (41247), `npm run agents:coder` (41242), `npm run agents:content-editor` (10003), `npm run agents:web-research` (41248).
+- Start individual agent servers: e.g. `npm run agents:orchestrator` (port 41243), `npm run agents:planning` (port 41244), `npm run agents:academic` (41245), `npm run agents:news` (41246), `npm run agents:data-analysis` (41247), `npm run agents:coder` (41242), `npm run agents:content-editor` (10003), `npm run agents:web-research` (41248).
 - Interact with agents: `npm run a2a:cli http://localhost:41243` (example for orchestrator) – streams messages, handles tasks/sessions.
 - Hot reload: tsx watches TS files; restart agents for prompt/config changes.
 - Debug: Enable `thinkingConfig.showThoughts: true` in `src/config.ts` for Gemini traces; use Genkit UI for flow visualization.

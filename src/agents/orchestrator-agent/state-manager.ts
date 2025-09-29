@@ -7,7 +7,7 @@ import type {
   ProgressUpdate,
   ResearchStep
 } from '../shared/interfaces.js';
-import { log } from './logger.js';
+import { flowlogger } from '../../logger.js';
 
 /**
  * State Manager for orchestrating research execution
@@ -302,9 +302,11 @@ export class OrchestratorStateManager {
     try {
       // In a real implementation, this would save to a database or file
       // For now, just log that persistence would happen
-      log('log', `Persisting state for research ${researchId}`);
-    } catch (error) {
-      log('error', `Failed to persist state for research ${researchId}:`, error);
+      flowlogger.info(`Persisting state for research ${researchId}`);
+    } catch (error: unknown) {
+      // Convert unknown to a safe string representation before logging
+      const errMsg = this.formatError(error);
+      flowlogger.error(`Failed to persist state for research ${researchId}: ${errMsg}`);
     }
   }
 
@@ -316,9 +318,37 @@ export class OrchestratorStateManager {
     try {
       // In a real implementation, this would load from a database or file
       // For now, just log that loading would happen
-      log('log', 'Loading persisted research states');
-    } catch (error) {
-      log('error', 'Failed to load persisted states:', error);
+      flowlogger.info('Loading persisted research states');
+    } catch (error: unknown) {
+      const errMsg = this.formatError(error);
+      flowlogger.error(`Failed to load persisted states: ${errMsg}`);
+    }
+  }
+
+  // Helper to safely format unknown errors for logging
+  private formatError(error: unknown): string {
+    if (error instanceof Error) {
+      // Explicitly handle possibly-null/undefined message and stack
+      const message = error.message ?? '';
+      const stack = error.stack ?? '';
+
+      if (message.length > 0 && stack.length > 0) {
+        return `${message}\n${stack}`;
+      }
+      if (message.length > 0) {
+        return message;
+      }
+      if (stack.length > 0) {
+        return stack;
+      }
+
+      // Fallback when both are empty
+      return 'Error';
+    }
+    try {
+      return typeof error === 'string' ? error : JSON.stringify(error);
+    } catch {
+      return String(error);
     }
   }
 }

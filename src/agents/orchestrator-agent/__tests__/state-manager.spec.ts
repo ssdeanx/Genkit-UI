@@ -10,8 +10,8 @@ import type {
 import { OrchestratorStateManager } from '../state-manager.js';
 
 // Mock the logger
-vi.mock('../logger.js', () => ({
-  log: vi.fn(),
+vi.mock('../../logger.js', () => ({
+  flowlogger: vi.fn(),
 }));
 
 describe('OrchestratorStateManager', () => {

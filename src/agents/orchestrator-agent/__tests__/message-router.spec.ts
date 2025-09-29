@@ -1,9 +1,6 @@
 // Mock dependencies
 vi.mock('../task-delegator.js');
 vi.mock('../a2a-communication.js');
-vi.mock('./logger.js', () => ({
-  log: vi.fn(),
-}));
 
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { MessageRouter } from '../message-router.js';
@@ -27,10 +24,18 @@ describe('MessageRouter', () => {
     vi.clearAllMocks();
 
     // Create mock instances
-    mockTaskDelegator = {} as TaskDelegator;
+    mockTaskDelegator = {
+      getActiveTasks: vi.fn().mockReturnValue([]),
+    } as unknown as TaskDelegator;
     mockA2ACommunicationManager = {
       sendTask: vi.fn().mockResolvedValue({ success: true }),
       cancelTask: vi.fn().mockResolvedValue(true),
+      getAgentEndpoints: vi.fn().mockReturnValue({
+        'web-research': 'http://localhost:41246',
+        'academic-research': 'http://localhost:41247',
+        'news-research': 'http://localhost:41248',
+        'data-analysis': 'http://localhost:41249',
+      }),
     } as unknown as A2ACommunicationManager;
 
     messageRouter = new MessageRouter(mockTaskDelegator, mockA2ACommunicationManager);

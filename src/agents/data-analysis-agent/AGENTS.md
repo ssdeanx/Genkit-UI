@@ -156,7 +156,7 @@ src/agents/data-analysis-agent/
 ├── index.ts              # Server setup and agent executor
 ├── genkit.ts             # AI model configuration
 ├── data_analysis.prompt  # Statistical methodology framework
-└── README.md             # This documentation
+└── AGENTS.md             # This documentation
 ```
 
 ### Dependencies

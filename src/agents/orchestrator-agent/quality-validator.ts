@@ -4,6 +4,29 @@ import type { ResearchStepResult, SourceCitation, ResearchFinding, Orchestration
  * Quality Validation System for the Orchestrator Agent
  * Validates research quality, source credibility, and cross-verification
  */
+
+// Add this new interface to define the expected shape of result.data (avoids 'any' casts)
+interface ResearchResultData {
+  findings?: Array<{
+    claim?: string;
+    statement?: string;
+    evidence?: string;
+    explanation?: string;
+    confidence?: number;
+    sourceIndices?: number[];
+    category?: string;
+  }>;
+}
+
+interface QualityBreakdown {
+  sourceCredibility: number;
+  dataConsistency: number;
+  crossValidation: number;
+  recency: number;
+  completeness: number;
+  overallScore: number;
+}
+
 export class QualityValidator {
   private credibilityWeights: Record<string, number> = {
     'academic': 0.95,
@@ -30,13 +53,7 @@ export class QualityValidator {
     orchestrationState: OrchestrationState
   ): {
     overallScore: number;
-    qualityBreakdown: {
-      sourceCredibility: number;
-      dataConsistency: number;
-      crossValidation: number;
-      recency: number;
-      completeness: number;
-    };
+    qualityBreakdown: QualityBreakdown;
     issues: QualityIssue[];
     recommendations: string[];
     meetsThresholds: boolean;
@@ -47,20 +64,21 @@ export class QualityValidator {
     const recency = this.calculateRecencyScore(results);
     const completeness = this.calculateCompleteness(results);
 
-    const qualityBreakdown = {
+    // Weighted overall score
+    const weights = { sourceCredibility: 0.3, dataConsistency: 0.25, crossValidation: 0.25, recency: 0.1, completeness: 0.1 };
+    const overallScore = Object.entries({ sourceCredibility, dataConsistency, crossValidation, recency, completeness }).reduce(
+      (sum, [key, value]) => sum + (value * weights[key as keyof typeof weights]),
+      0
+    );
+
+    const qualityBreakdown: QualityBreakdown = {
       sourceCredibility,
       dataConsistency,
       crossValidation,
       recency,
-      completeness
+      completeness,
+      overallScore
     };
-
-    // Weighted overall score
-    const weights = { sourceCredibility: 0.3, dataConsistency: 0.25, crossValidation: 0.25, recency: 0.1, completeness: 0.1 };
-    const overallScore = Object.entries(qualityBreakdown).reduce(
-      (sum, [key, value]) => sum + (value * weights[key as keyof typeof weights]),
-      0
-    );
 
     const issues = this.identifyQualityIssues(results, qualityBreakdown, orchestrationState);
     const recommendations = this.generateRecommendations(issues, qualityBreakdown);
@@ -86,8 +104,9 @@ export class QualityValidator {
     }
 
     const credibilityScores = allSources.map(source => {
-      const baseWeight = this.credibilityWeights[source.type] || 0.5;
-      const recencyMultiplier = this.getRecencyMultiplier(source.accessedAt || new Date());
+      const baseWeight = this.credibilityWeights[source.type] ?? 0.5;
+      const accessDate = source.accessedAt ?? new Date();  // Fixed: Use nullish coalescing to check for null/undefined instead of truthiness
+      const recencyMultiplier = this.getRecencyMultiplier(accessDate);
       return baseWeight * recencyMultiplier * source.credibilityScore;
     });
 
@@ -117,7 +136,7 @@ export class QualityValidator {
    */
   private calculateCrossValidation(results: ResearchStepResult[]): number {
     const findings = this.extractAllFindings(results);
-    const sourcesPerFinding = findings.map(f => f.sources?.length || 0);
+    const sourcesPerFinding = findings.map(f => f.sources.length || 0);
 
     if (sourcesPerFinding.length === 0) {
       return 0;
@@ -138,7 +157,7 @@ export class QualityValidator {
 
     // Ensure each mapped value is a definite number (fallback to 0)
     const recencyScores: number[] = allSources.map(source => {
-      const recencyCategory = this.categorizeRecency(source.accessedAt || new Date());
+      const recencyCategory = this.categorizeRecency(source.accessedAt ?? new Date());
       return this.recencyWeights[recencyCategory] ?? 0;
     });
 
@@ -174,7 +193,8 @@ export class QualityValidator {
     const allSources: SourceCitation[] = [];
 
     for (const result of results) {
-      if (result.sources && Array.isArray(result.sources)) {
+      // Use Array.isArray(...) directly to avoid unexpected-object conditional lint warnings
+      if (Array.isArray(result.sources)) {
         allSources.push(...result.sources);
       }
     }
@@ -189,18 +209,22 @@ export class QualityValidator {
     const allFindings: ResearchFinding[] = [];
 
     for (const result of results) {
-      if (result.data && typeof result.data === 'object') {
-        const data = result.data as any;
+      if ((Boolean(result.data)) && typeof result.data === 'object') {
+        const data = result.data as ResearchResultData;  // Updated: Use specific type instead of 'any'
 
-        if (data.findings && Array.isArray(data.findings)) {
+        if ((Boolean(data.findings)) && Array.isArray(data.findings)) {
           // Convert to ResearchFinding format if needed
-          data.findings.forEach((finding: any) => {
+          data.findings.forEach((finding) => {
+            let category: 'factual' | 'analytical' | 'speculative' = 'factual';
+            if (finding.category !== null && typeof finding.category === 'string' && ['factual', 'analytical', 'speculative'].includes(finding.category)) {
+              category = finding.category as 'factual' | 'analytical' | 'speculative';
+            }
             allFindings.push({
-              claim: finding.claim || finding.statement || '',
-              evidence: finding.evidence || finding.explanation || '',
-              confidence: finding.confidence || 0.5,
-              sources: finding.sourceIndices || [],
-              category: finding.category || 'factual'
+              claim: (finding.claim ?? finding.statement) ?? '',
+              evidence: (finding.evidence ?? finding.explanation) ?? '',
+              confidence: finding.confidence ?? 0.5,
+              sources: finding.sourceIndices ?? [],
+              category
             });
           });
         }
@@ -317,8 +341,8 @@ export class QualityValidator {
     let expected = 4;
 
     // Add expectations based on result data structure
-    if (result.data && typeof result.data === 'object') {
-      const data = result.data as any;
+    if ((Boolean(result.data)) && typeof result.data === 'object') {
+      const data = result.data as ResearchResultData;  // Updated: Use specific type instead of 'any'
       if (data.findings && Array.isArray(data.findings)) {
         expected += data.findings.length * 3; // claim, evidence, confidence per finding
       }
@@ -333,7 +357,8 @@ export class QualityValidator {
   private countPresentElements(result: ResearchStepResult): number {
     let present = 0;
 
-    if (result.sources && result.sources.length > 0) {
+    // Ensure sources is an actual array before checking length
+    if (Array.isArray(result.sources) && result.sources.length > 0) {
       present++;
     }
     if (result.qualityScore !== undefined && result.qualityScore >= 0) {
@@ -342,19 +367,20 @@ export class QualityValidator {
     if (result.processingTime && result.processingTime > 0) {
       present++;
     }
-    if (result.metadata && Object.keys(result.metadata).length > 0) {
+    // Replace object-truthiness check with explicit key-length check to avoid lint warning
+    if (Object.keys(result.metadata ?? {}).length > 0) {
       present++;
     }
 
     // Count data elements
-    if (result.data && typeof result.data === 'object') {
-      const data = result.data as any;
+    if ((Boolean(result.data)) && typeof result.data === 'object') {
+      const data = result.data as ResearchResultData;  // Updated: Use specific type instead of 'any'
       if (data.findings && Array.isArray(data.findings)) {
-        data.findings.forEach((finding: any) => {
-          if (finding.claim) {
+        data.findings.forEach((finding) => {
+          if (finding.claim !== null && finding.claim !== undefined && finding.claim.trim() !== '') {
             present++;
           }
-          if (finding.evidence) {
+          if (finding.evidence !== null && finding.evidence !== undefined && finding.evidence !== '') {
             present++;
           }
           if (finding.confidence !== undefined) {
@@ -372,61 +398,73 @@ export class QualityValidator {
    */
   private identifyQualityIssues(
     results: ResearchStepResult[],
-    qualityBreakdown: any,
-    _orchestrationState: OrchestrationState
+    qualityBreakdown: QualityBreakdown,
+    orchestrationState: OrchestrationState
   ): QualityIssue[] {
     const issues: QualityIssue[] = [];
 
+    // Get thresholds from plan, with defaults
+    const thresholds = orchestrationState.plan.qualityThresholds ?? [];
+    const getThreshold = (metric: string, defaultValue: number): number => {
+      const threshold = thresholds.find(t => t.metric === metric);
+      return threshold ? threshold.minimumValue : defaultValue;
+    };
+
     // Source credibility issues
-    if (qualityBreakdown.sourceCredibility < 0.6) {
+    const sourceCredThreshold = getThreshold('source-credibility', 0.6);
+    if (qualityBreakdown.sourceCredibility < sourceCredThreshold) {
       issues.push({
         type: 'low-source-credibility',
-        severity: qualityBreakdown.sourceCredibility < 0.3 ? 'high' : 'medium',
-        description: `Source credibility score is ${qualityBreakdown.sourceCredibility.toFixed(2)} (below recommended threshold)`,
+        severity: qualityBreakdown.sourceCredibility < sourceCredThreshold * 0.5 ? 'high' : 'medium',
+        description: `Source credibility score is ${qualityBreakdown.sourceCredibility.toFixed(2)} (below threshold of ${sourceCredThreshold.toFixed(2)})`,
         affectedSteps: results.map(r => r.stepId),
         suggestedFix: 'Include more academic or government sources'
       });
     }
 
     // Data consistency issues
-    if (qualityBreakdown.dataConsistency < 0.7) {
+    const dataConsistThreshold = getThreshold('data-consistency', 0.7);
+    if (qualityBreakdown.dataConsistency < dataConsistThreshold) {
       issues.push({
         type: 'inconsistent-data',
-        severity: qualityBreakdown.dataConsistency < 0.4 ? 'high' : 'medium',
-        description: `Data consistency score is ${qualityBreakdown.dataConsistency.toFixed(2)} (findings show significant disagreement)`,
+        severity: qualityBreakdown.dataConsistency < dataConsistThreshold * 0.57 ? 'high' : 'medium',
+        description: `Data consistency score is ${qualityBreakdown.dataConsistency.toFixed(2)} (below threshold of ${dataConsistThreshold.toFixed(2)})`,
         affectedSteps: results.map(r => r.stepId),
         suggestedFix: 'Cross-validate findings across multiple sources'
       });
     }
 
     // Cross-validation issues
-    if (qualityBreakdown.crossValidation < 0.5) {
+    const crossValThreshold = getThreshold('cross-validation', 0.5);
+    if (qualityBreakdown.crossValidation < crossValThreshold) {
       issues.push({
         type: 'insufficient-cross-validation',
         severity: 'medium',
-        description: `Cross-validation score is ${qualityBreakdown.crossValidation.toFixed(2)} (findings not sufficiently corroborated)`,
+        description: `Cross-validation score is ${qualityBreakdown.crossValidation.toFixed(2)} (below threshold of ${crossValThreshold.toFixed(2)})`,
         affectedSteps: results.map(r => r.stepId),
         suggestedFix: 'Ensure each key finding is supported by multiple sources'
       });
     }
 
     // Recency issues
-    if (qualityBreakdown.recency < 0.6) {
+    const recencyThreshold = getThreshold('recency', 0.6);
+    if (qualityBreakdown.recency < recencyThreshold) {
       issues.push({
         type: 'outdated-sources',
         severity: 'low',
-        description: `Source recency score is ${qualityBreakdown.recency.toFixed(2)} (sources may be outdated)`,
+        description: `Source recency score is ${qualityBreakdown.recency.toFixed(2)} (below threshold of ${recencyThreshold.toFixed(2)})`,
         affectedSteps: results.map(r => r.stepId),
         suggestedFix: 'Include more recent sources and data'
       });
     }
 
     // Completeness issues
-    if (qualityBreakdown.completeness < 0.8) {
+    const completenessThreshold = getThreshold('completeness', 0.8);
+    if (qualityBreakdown.completeness < completenessThreshold) {
       issues.push({
         type: 'incomplete-data',
         severity: 'medium',
-        description: `Data completeness score is ${qualityBreakdown.completeness.toFixed(2)} (missing expected information)`,
+        description: `Data completeness score is ${qualityBreakdown.completeness.toFixed(2)} (below threshold of ${completenessThreshold.toFixed(2)})`,
         affectedSteps: results.map(r => r.stepId),
         suggestedFix: 'Ensure all research steps provide complete results'
       });
@@ -438,7 +476,7 @@ export class QualityValidator {
   /**
    * Generate recommendations based on quality issues
    */
-  private generateRecommendations(issues: QualityIssue[], qualityBreakdown: any): string[] {
+  private generateRecommendations(issues: QualityIssue[], qualityBreakdown: QualityBreakdown): string[] {
     const recommendations: string[] = [];
 
     if (issues.some(i => i.type === 'low-source-credibility')) {
@@ -479,15 +517,24 @@ export class QualityValidator {
    */
   private checkThresholdCompliance(
     overallScore: number,
-    qualityBreakdown: any,
-    thresholds: QualityThreshold[]
+    qualityBreakdown: QualityBreakdown,
+    thresholds?: QualityThreshold[]
   ): boolean {
     if (!thresholds || thresholds.length === 0) {
       return overallScore >= 0.7; // Default threshold
     }
 
+    // Mapping from hyphenated metric names to camelCase keys in QualityBreakdown
+    const metricMap: Record<string, keyof QualityBreakdown> = {
+      'source-credibility': 'sourceCredibility',
+      'data-consistency': 'dataConsistency',
+      'cross-validation': 'crossValidation',
+      // Add other mappings if needed for future metrics
+    };
+
     return thresholds.every(threshold => {
-      const actualValue = qualityBreakdown[threshold.metric] || 0;
+      const key = metricMap[threshold.metric] ?? (threshold.metric as keyof QualityBreakdown);
+      const actualValue = qualityBreakdown[key] ?? 0;
       return actualValue >= threshold.minimumValue;
     });
   }
@@ -506,27 +553,20 @@ export class QualityValidator {
     let {credibilityScore} = source;
 
     // Check source type credibility
-    const typeWeight = this.credibilityWeights[source.type] || 0.5;
+    const typeWeight = this.credibilityWeights[source.type] ?? 0.5;
     if (typeWeight < 0.7) {
       issues.push(`Source type '${source.type}' has lower inherent credibility`);
       recommendations.push('Consider supplementing with higher-credibility sources');
     }
 
     // Check recency
-    const recencyCategory = this.categorizeRecency(source.accessedAt || new Date());
+    const recencyCategory = this.categorizeRecency(source.accessedAt ?? new Date());
     if (recencyCategory === 'outdated') {
       issues.push('Source data may be outdated');
       credibilityScore *= 0.8;
       recommendations.push('Verify if more recent data is available');
     }
-
-    // Check for missing metadata
-    if (!source.author) {
-      issues.push('Source missing author information');
-      credibilityScore *= 0.9;
-    }
-
-    if (!source.publicationDate) {
+    if (source.publicationDate === null) {
       issues.push('Source missing publication date');
       credibilityScore *= 0.9;
     }
@@ -559,10 +599,8 @@ export class QualityValidator {
       mitigationStrategy: string;
     }> = [];
 
-    const findings = this.extractAllFindings(results);
-
     // Check for confirmation bias (similar findings from same source type)
-    const sourceTypeClusters = this.detectSourceTypeClusters(findings);
+    const sourceTypeClusters = this.detectSourceTypeClusters(results);
     if (sourceTypeClusters.length > 0) {
       biases.push({
         type: 'confirmation-bias',
@@ -603,25 +641,42 @@ export class QualityValidator {
   /**
    * Detect clusters of findings from same source types
    */
-  private detectSourceTypeClusters(findings: ResearchFinding[]): string[][] {
-    const clusters: string[][] = [];
+  private detectSourceTypeClusters(results: ResearchStepResult[]): string[][] {
+    const findings = this.extractAllFindings(results);
+    const clusters = new Map<string, string[]>(); // pattern -> claims
 
-    findings.forEach(finding => {
-      const sourceTypes = finding.sources.map(idx => `source-${idx}`);
-      // Simple clustering: findings with identical source type patterns
-      const existingCluster = clusters.find(cluster =>
-        cluster.length === sourceTypes.length &&
-        cluster.every(type => sourceTypes.includes(type))
-      );
+    // For each finding, we need to know which result it came from to look up source types
+    let findingIndex = 0;
+    for (const result of results) {
+      if ((Boolean(result.data)) && typeof result.data === 'object') {
+        const data = result.data as ResearchResultData;
+        if ((Boolean(data.findings)) && Array.isArray(data.findings)) {
+          data.findings.forEach((findingData) => {
+            const sourceIndices = findingData.sourceIndices ?? [];
+            // Get source types for this finding
+            const sourceTypes = sourceIndices.map(idx => {
+              const source = result.sources?.[idx];
+              return source?.type ?? 'unknown';
+            }).sort();
 
-      if (existingCluster) {
-        existingCluster.push(finding.claim);
-      } else {
-        clusters.push([finding.claim]);
+            const pattern = sourceTypes.join(',');
+
+            if (!clusters.has(pattern)) {
+              clusters.set(pattern, []);
+            }
+            // Use the finding from our extracted findings array
+            const finding = findings[findingIndex];
+            if (finding) {
+              clusters.get(pattern)!.push(finding.claim);
+            }
+            findingIndex++;
+          });
+        }
       }
-    });
+    }
 
-    return clusters.filter(cluster => cluster.length > 2); // Only significant clusters
+    // Return only clusters with more than 2 findings (significant clusters)
+    return Array.from(clusters.values()).filter(cluster => cluster.length > 2);
   }
 
   /**
@@ -629,7 +684,7 @@ export class QualityValidator {
    */
   private detectRecencyBias(results: ResearchStepResult[]): { affectedFindings: string[] } | null {
     const allSources = this.extractAllSources(results);
-    const recencyScores = allSources.map(s => this.categorizeRecency(s.accessedAt || new Date()));
+    const recencyScores = allSources.map(s => this.categorizeRecency(s.accessedAt ?? new Date()));
 
     const recentCount = recencyScores.filter(r => r === 'current' || r === 'recent').length;
     const totalCount = recencyScores.length;
