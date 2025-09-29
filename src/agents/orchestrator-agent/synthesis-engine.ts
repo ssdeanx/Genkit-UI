@@ -54,7 +54,7 @@ export class SynthesisEngine {
       };
 
     } catch (error) {
-      flowlogger.error('Synthesis failed:', error);
+      flowlogger.error('Synthesis failed:');
       throw new Error(`Synthesis engine failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

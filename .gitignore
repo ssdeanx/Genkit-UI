@@ -36,3 +36,6 @@ chroma
 .specify/templates/*.md
 
 composio.md
+
+#Ignore cursor AI rules
+.cursor/rules/codacy.mdc
