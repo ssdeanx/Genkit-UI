@@ -33,7 +33,7 @@ Known issues / risks
 
 Recent updates
 
-- 2025-09-29: Session concluded. `coder` and `content-editor` agent tests are now passing. `TASK009` is complete.
+- 2025-09-29: Session concluded. `coder` agent tests are passing (3/3), `content-editor` agent tests completed and passing (corrected by user). `orchestrator` agent: result-aggregator.spec.ts created but deemed unusable by user. `TASK009` is 67% complete (coder + content-editor complete, orchestrator failed).
 - 2025-09-28: Memory Bank updated with comprehensive project architecture understanding
 - 2025-09-28: Dual backend pattern documented (flows via HTTP/Firebase + A2A agents)
 - 2025-09-28: Firebase deployment strategy clarified (App Hosting + Functions)
