@@ -229,7 +229,7 @@ For use in pull request summaries or executive summaries.
     3. Links to validation artifacts and Decision Records.
     4. Links to final `requirements.md`, `design.md`, and `tasks.md`.
 - [ ] Finalize workspace.
-      - Archive intermediate files, logs, and temporary artifacts to `.agent_work/`.
+      - Archive intermediate files, logs, and temporary artifacts to `memory-bank/logs  `.
 - [ ] Continue to next task.
       - Document transition or completion.
 

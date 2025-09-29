@@ -54,15 +54,31 @@ export class CoderAgentExecutor implements AgentExecutor {
     const taskId = existingTask?.id ?? uuidv4();
     const contextId = (userMessage.contextId ?? existingTask?.contextId) ?? uuidv4();
 
+    // Enhanced task history management with proper state preservation
+    const taskHistory = existingTask?.history ? [...existingTask.history] : [];
+    const taskArtifacts = existingTask?.artifacts ? [...existingTask.artifacts] : [];
+    const taskMetadata = existingTask?.metadata ? { ...existingTask.metadata } : {};
+
+    // Ensure user message is in history (avoid duplicates by messageId)
+    const messageExists = taskHistory.some(m => m.messageId === userMessage.messageId);
+    if (!messageExists) {
+      taskHistory.push(userMessage);
+    }
+
+    // Update task metadata with execution context
+    taskMetadata.lastExecutionStarted = new Date().toISOString();
+    taskMetadata.executionCount = (taskMetadata.executionCount as number || 0) + 1;
+
+    // Publish initial Task event if it's a new task
     if (!existingTask) {
       const initialTask: Task = {
         kind: 'task',
         id: taskId,
         contextId,
         status: { state: 'submitted', timestamp: new Date().toISOString() },
-        history: [userMessage],
-        metadata: userMessage.metadata ?? {},
-        artifacts: [] as Artifact[],
+        history: taskHistory,
+        metadata: taskMetadata,
+        artifacts: taskArtifacts,
       };
       eventBus.publish(initialTask);
     }
@@ -321,11 +337,12 @@ export class CoderAgentExecutor implements AgentExecutor {
       for (const f of validated.files) {
         const filename = f.filename ?? 'untitled';
         const content = f.content ?? '';
+        const artifact: Artifact = { artifactId: filename, name: filename, parts: [{ kind: 'text', text: content }] };
         const artifactUpdate: TaskArtifactUpdateEvent = {
           kind: 'artifact-update',
           taskId,
           contextId,
-          artifact: { artifactId: filename, name: filename, parts: [{ kind: 'text', text: content }] },
+          artifact,
           append: false,
           lastChunk: true,
         };

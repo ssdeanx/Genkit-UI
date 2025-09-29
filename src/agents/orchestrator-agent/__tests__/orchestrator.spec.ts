@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { OrchestrationState, ResearchPlan, ResearchStepExecution } from '../../shared/interfaces.js';
-import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
+import type { ExecutionEventBus, RequestContext, TaskStore } from '@a2a-js/sdk/server';
 import { OrchestratorAgentExecutor } from '../index.js';
 import { TaskDelegator } from '../task-delegator.js';
 import type { A2ACommunicationManager } from '../a2a-communication.js';
@@ -29,6 +29,9 @@ vi.mock('../genkit.js', () => ({
 }));
 
 const mockA2aManager = {} as unknown as A2ACommunicationManager;
+const mockTaskStore = {
+  save: vi.fn().mockResolvedValue(undefined),
+} as unknown as TaskStore;
 const mockEventBus = { publish: vi.fn() } as unknown as ExecutionEventBus;
 
 const mockRequestContext: RequestContext = {
@@ -55,7 +58,7 @@ describe('OrchestratorAgentExecutor', () => {
     vi.spyOn(taskDelegator, 'delegateResearchSteps').mockResolvedValue([
       { stepId: 'test-step', agentId: 'web-research', status: 'running', progressUpdates: [], retryCount: 0 } as ResearchStepExecution,
     ]);
-    executor = new OrchestratorAgentExecutor(taskDelegator, mockA2aManager);
+    executor = new OrchestratorAgentExecutor(taskDelegator, mockTaskStore);
     state = {
       researchId: 'test-id',
       plan: {} as ResearchPlan,

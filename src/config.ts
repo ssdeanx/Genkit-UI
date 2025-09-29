@@ -1,6 +1,7 @@
 import { devLocalVectorstore } from '@genkit-ai/dev-local-vectorstore';
 import { googleAI } from '@genkit-ai/google-genai';
 import { genkit } from 'genkit';
+import { version } from 'os';
 import { Readable } from 'stream';
 
 // Initialize Genkit with the Google AI plugin

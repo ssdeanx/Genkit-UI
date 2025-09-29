@@ -8,28 +8,6 @@ sources:
     password: my-password
 
 tools:
-  document-search:
-    kind: postgres-sql
-    source: postgres-source
-    description: "Performs a vector similarity search to find documents semantically similar to a given query."
-    parameters:
-      - name: embedding
-        type: array
-        description: "The embedding vector representing the user's query."
-    statement: |
-      SELECT id, content FROM documents ORDER BY embedding <-> $1 LIMIT 10;
-
-  get-document-by-id:
-    kind: postgres-sql
-    source: postgres-source
-    description: "Fetches a specific document by its unique ID."
-    parameters:
-      - name: id
-        type: number
-        description: "The unique ID of the document to retrieve."
-    statement: |
-      SELECT id, content FROM documents WHERE id = $1;
-
   get-all-documents:
     kind: postgres-sql
     source: postgres-source

@@ -12,6 +12,8 @@
     "logs": "firebase functions:log"
   },
   "name": "functions",
+  "type": "module",
+  "version": "1.0.3",
   "engines": {
     "node": "22"
   },

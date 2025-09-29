@@ -13,7 +13,7 @@ if (process.env.NODE_ENV !== 'test' && (process.env.GEMINI_API_KEY === undefined
 // --- Server Setup ---
 
 const coderAgentCard: AgentCard = {
-  protocolVersion: '0.3.4',
+  protocolVersion: '0.3.0',
   name: 'Coder Agent',
   description:
     'An agent that generates code based on natural language instructions and streams file outputs.',
@@ -28,25 +28,48 @@ const coderAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: {},
-  security: [],
-  defaultInputModes: ['text'],
-  defaultOutputModes: ['text', 'file'], // 'file' implies artifacts
+  securitySchemes: {
+    apiKey: {
+      type: 'apiKey',
+      name: 'X-API-Key',
+      in: 'header'
+    }
+  },
+  security: [{
+    apiKey: []
+  }],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain', 'application/octet-stream'], // Support for file artifacts
   skills: [
     {
       id: 'code_generation',
       name: 'Code Generation',
       description:
         'Generates code snippets or complete files based on user requests, streaming the results.',
-      tags: ['code', 'development', 'programming'],
+      tags: ['code', 'development', 'programming', 'typescript', 'javascript', 'python'],
       examples: [
         'Write a python function to calculate fibonacci numbers.',
         'Create an HTML file with a basic button that alerts "Hello!" when clicked.',
-        'Writ'
+        'Write a React component for a todo list',
+        'Generate a Node.js Express server with authentication'
       ],
-      inputModes: ['text'],
-      outputModes: ['text', 'file'],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain', 'application/octet-stream'],
     },
+    {
+      id: 'code_review',
+      name: 'Code Review',
+      description:
+        'Reviews and analyzes existing code for bugs, improvements, and best practices.',
+      tags: ['code-review', 'analysis', 'debugging', 'quality'],
+      examples: [
+        'Review this JavaScript function for potential bugs',
+        'Analyze this Python code for performance improvements',
+        'Check this TypeScript code for type safety issues'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    }
   ],
   supportsAuthenticatedExtendedCard: false,
 };

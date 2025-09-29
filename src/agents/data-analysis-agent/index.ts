@@ -17,7 +17,7 @@ if (process.env.NODE_ENV !== 'test') {
 // --- Server Setup ---
 
 const dataAnalysisAgentCard: AgentCard = {
-  protocolVersion: '0.3.4',
+  protocolVersion: '0.3.0',
   name: 'Data Analysis Agent',
   description:
     'An agent that conducts statistical analysis, quantitative research, and data-driven insights with rigorous methodological standards.',
@@ -32,26 +32,65 @@ const dataAnalysisAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: {},
-  security: [],
-  defaultInputModes: ['text'],
-  defaultOutputModes: ['text'],
+  securitySchemes: {
+    apiKey: {
+      type: 'apiKey',
+      name: 'X-API-Key',
+      in: 'header'
+    }
+  },
+  security: [{
+    apiKey: []
+  }],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
   skills: [
     {
-      id: 'data_analysis',
-      name: 'Data Analysis',
+      id: 'statistical_analysis',
+      name: 'Statistical Analysis',
       description:
         'Conducts comprehensive statistical analysis with hypothesis testing, data visualization, and quantitative insights from research data.',
-      tags: ['statistics', 'quantitative', 'analysis', 'visualization'],
+      tags: ['statistics', 'quantitative', 'analysis', 'hypothesis-testing', 'visualization'],
       examples: [
         'Analyze statistical significance of research findings',
         'Create data visualizations for survey results',
         'Perform regression analysis on experimental data',
         'Evaluate effect sizes and confidence intervals',
+        'Conduct correlation analysis on datasets'
       ],
-      inputModes: ['text'],
-      outputModes: ['text'],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
     },
+    {
+      id: 'data_visualization',
+      name: 'Data Visualization',
+      description:
+        'Creates effective data visualizations, charts, and graphs to communicate quantitative insights and patterns.',
+      tags: ['visualization', 'charts', 'graphs', 'data-communication'],
+      examples: [
+        'Create charts for experimental results',
+        'Design graphs for survey data analysis',
+        'Visualize statistical trends over time',
+        'Generate plots for correlation analysis'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    },
+    {
+      id: 'methodological_evaluation',
+      name: 'Methodological Evaluation',
+      description:
+        'Evaluates research methodologies, assesses data quality, and provides recommendations for analytical approaches.',
+      tags: ['methodology', 'evaluation', 'data-quality', 'rigor'],
+      examples: [
+        'Evaluate the methodological rigor of a research study',
+        'Assess data quality and collection methods',
+        'Recommend appropriate statistical tests for research questions',
+        'Review analytical approaches for validity and reliability'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    }
   ],
   supportsAuthenticatedExtendedCard: false,
 };

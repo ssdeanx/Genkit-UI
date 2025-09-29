@@ -1,4 +1,5 @@
 import { getJson } from 'serpapi';
+import { flowlogger } from '../../logger.js';
 
 /**
  * Web Search Utilities for the Web Research Agent
@@ -10,7 +11,7 @@ export class WebSearchUtils {
   constructor(apiKey?: string) {
     this.apiKey = apiKey ?? process.env.SERPAPI_API_KEY ?? '';
     if (!this.apiKey) {
-      console.warn('SERPAPI_API_KEY not set. Web search functionality will be limited.');
+      flowlogger.warn('SERPAPI_API_KEY not set. Web search functionality will be limited.');
     }
   }
 
@@ -28,12 +29,12 @@ export class WebSearchUtils {
         ...this.buildAdvancedParams(options, query)
       };
 
-      console.log(`Performing web search for: "${query}"`);
+      flowlogger.info(`Performing web search for: "${query}"`);
       const results = await getJson(searchParams);
 
       return this.parseSearchResults(results, query);
     } catch (error) {
-      console.error('Web search failed:', error);
+      flowlogger.error({ error }, 'Web search failed');
       throw new Error(`Web search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -51,12 +52,12 @@ export class WebSearchUtils {
         ...this.buildNewsParams(options)
       };
 
-      console.log(`Performing news search for: "${query}"`);
+      flowlogger.info(`Performing news search for: "${query}"`);
       const results = await getJson(searchParams);
 
       return this.parseNewsResults(results, query);
     } catch (error) {
-      console.error('News search failed:', error);
+      flowlogger.error({ error }, 'News search failed');
       throw new Error(`News search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -74,12 +75,12 @@ export class WebSearchUtils {
         ...this.buildScholarParams(options, query)
       };
 
-      console.log(`Performing scholar search for: "${query}"`);
+      flowlogger.info(`Performing scholar search for: "${query}"`);
       const results = await getJson(searchParams);
 
       return this.parseScholarResults(results, query);
     } catch (error) {
-      console.error('Scholar search failed:', error);
+      flowlogger.error({ error }, 'Scholar search failed');
       throw new Error(`Scholar search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

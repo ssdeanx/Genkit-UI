@@ -2,32 +2,55 @@
 
 Date: 2025-09-28
 
-Current focus
+## Current Work Focus
 
-- Finalize coder agent executor fix (user actively editing `src/agents/coder/executor.ts`)
-- Ensure content-editor and data-analysis agents use the main logger and contain no stray `console.*`
-- Keep all agent, flow, and tool test suites green
+**Session Status**: Memory Bank sync session - validating current state and ensuring consistency across all documentation.
 
-Recent changes
+**Completed Work**:
 
-- Coder agent server now uses the main `flowlogger` in `src/agents/coder/index.ts` and guards GEMINI_API_KEY at runtime (skipped in tests)
-- Research agents (web, news, academic) received deterministic unit tests and minor query composition fixes; suites green
-- Orchestrator and planning-agent suites green; A2A communication path supports DI and streaming tests
+- Comprehensive project architecture documented including dual-backend approach (flows + A2A agents)
+- Firebase deployment strategy clarified with App Hosting and Functions
+- Toolbox integration documented (7 tools running locally via Docker)
+- Agent vs Flow architecture patterns established
+- Memory Bank consistency validated across all files
 
-Authoritative patterns observed (from @a2a-js/sdk)
+**Remaining Work**:
 
-- A2AExpressApp exposes JSON and SSE via a single handler depending on generator usage
-- Client supports `sendMessage`, `sendMessageStream`, `cancelTask`, and `resubscribe`
-- Streams terminate on final TaskStatusUpdateEvent or terminal Message
+- Complete TASK008 A2A implementation (streaming, error handling, security)
+- TASK004 CI link validation setup
 
-Decisions
+## Architecture Overview
 
-- Prefer DI for transports and external services to keep tests deterministic
-- Avoid direct `console.*` in agents; use shared logger (`flowlogger`) instead
-- Keep JSON-RPC/streaming paths behind environment flags if needed to protect tests
+**Dual Backend Architecture**:
 
-Next steps
+- **Genkit Flows** ([src/flows/](../src/flows/)): HTTP-exposed flows via [flowServer.ts](../src/flowServer.ts) (port 3400) and Firebase Functions ([functions/](../functions/))
+- **A2A Agents** ([src/agents/](../src/agents/)): 8 specialized agents using @a2a-js/sdk for inter-agent communication
+- **Toolbox Integration**: Local PostgreSQL-based toolbox with 7 tools running via Docker Compose
+- **Deployment**: Firebase App Hosting for backend flows, Functions for serverless execution
 
-- Complete coder executor adjustments: streaming/cancel semantics and validation intact, adopt main logger
-- Sweep content-editor and data-analysis agents for any `console.*` and replace with `flowlogger`
-- Run full test suite after executor fix and update docs accordingly
+**Key Components**:
+
+- Main [src/config.ts](../src/config.ts): Genkit with Gemini 2.5 Flash, vectorstore, advanced model config
+- Functions [functions/src/config.ts](../functions/src/config.ts): Firebase-optimized Genkit setup with telemetry
+- CLI [src/cli.ts](../src/cli.ts): A2A client for agent interaction
+- Toolbox [src/config/toolbox.ts](../src/config/toolbox.ts): Integration with local toolbox server
+
+## Decisions
+
+- Maintain dual architecture: flows for direct HTTP calls, agents for complex orchestration
+- Use Firebase for production deployment with App Hosting + Functions
+- Keep toolbox local for development with Docker Compose
+- Complete A2A protocol implementation across all agents
+- Focus on streaming and error handling for production readiness
+
+## Next Steps
+
+- Complete A2A streaming implementation
+- Add comprehensive error handling with A2A error codes
+- Implement security middleware for agents
+- Set up CI link validation
+- Test full agent orchestration flows
+- Implement complete task lifecycle management with proper status updates
+- Add streaming support to agent executors using ExecutionEventBus
+- Enhance error handling with A2A-specific error codes and structured responses
+- Update agent servers to use A2AExpressApp pattern with proper middleware

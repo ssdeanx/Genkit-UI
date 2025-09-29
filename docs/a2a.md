@@ -17,3 +17,8 @@ This project uses [@a2a-js/sdk](https://github.com/a2aproject/a2a-js) as a depen
 - [A2A Request Handler](https://github.com/a2aproject/a2a-js/blob/main/src/server/request_handler/a2a_request_handler.ts)
 - [A2A Error](https://github.com/a2aproject/a2a-js/blob/main/src/server/error.ts)
 - [A2A Store](https://github.com/a2aproject/a2a-js/blob/main/src/server/store.ts)
+
+https://a2aprotocol.ai/docs/guide/a2a-javascript-sdk
+https://a2aprotocol.ai/docs/guide/a2a-typescript-guide
+https://a2aprotocol.ai/blog/a2a-typescript-guide
+https://a2aprotocol.ai/blog/a2a-javascript-sdk

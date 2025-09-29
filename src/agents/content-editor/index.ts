@@ -18,40 +18,77 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 const contentEditorAgentCard: AgentCard = {
-  name: "Content Editor Agent (JS)",
-  description: "An agent that can proof-read and polish content.",
-  url: "http://localhost:10003/",
+  protocolVersion: '0.3.0',
+  name: 'Content Editor Agent',
+  description: 'An agent that proof-reads, polishes, and enhances written content with professional editing standards.',
+  url: 'http://localhost:10003/',
   provider: {
-    organization: "A2A Samples",
-    url: "https://example.com/a2a-samples",
+    organization: 'A2A Samples',
+    url: 'https://example.com/a2a-samples',
   },
-  version: "1.0.0",
+  version: '1.0.0',
   capabilities: {
     streaming: true,
     pushNotifications: false,
-    stateTransitionHistory: false,
+    stateTransitionHistory: true,
   },
-  // Provide the expected typed shapes (empty objects) instead of `undefined`
-  // to satisfy exactOptionalPropertyTypes and AgentCard typings.
-  securitySchemes: {},
-  security: [],
-  defaultInputModes: ["text"],
-  defaultOutputModes: ["text"],
+  securitySchemes: {
+    apiKey: {
+      type: 'apiKey',
+      name: 'X-API-Key',
+      in: 'header'
+    }
+  },
+  security: [{
+    apiKey: []
+  }],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
   skills: [
     {
-      id: "editor",
-      name: "Edits content",
-      description: "Edits content by proof-reading and polishing",
-      tags: ["writer"],
+      id: 'content_editing',
+      name: 'Content Editing',
+      description: 'Proof-reads, polishes, and enhances written content with professional editing standards.',
+      tags: ['editing', 'proofreading', 'polishing', 'writing', 'professional'],
       examples: [
-        "Edit the following article, make sure it has a professional tone",
+        'Edit the following article, make sure it has a professional tone',
+        'Proofread this blog post for grammar and clarity',
+        'Polish this technical documentation for better readability',
+        'Enhance this marketing copy for better engagement'
       ],
-      inputModes: ["text"],
-      outputModes: ["text"],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
     },
+    {
+      id: 'style_consistency',
+      name: 'Style Consistency',
+      description: 'Ensures consistent style, tone, and voice throughout documents and content.',
+      tags: ['style', 'consistency', 'tone', 'voice', 'brand'],
+      examples: [
+        'Ensure consistent tone throughout this document',
+        'Apply brand voice guidelines to this content',
+        'Check style consistency across multiple documents',
+        'Maintain consistent terminology and phrasing'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    },
+    {
+      id: 'content_enhancement',
+      name: 'Content Enhancement',
+      description: 'Improves content quality, engagement, and effectiveness through strategic editing and enhancement.',
+      tags: ['enhancement', 'quality', 'engagement', 'effectiveness'],
+      examples: [
+        'Enhance this article for better reader engagement',
+        'Improve the clarity and impact of this technical explanation',
+        'Strengthen the persuasive elements in this marketing content',
+        'Optimize this content for better SEO and readability'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    }
   ],
   supportsAuthenticatedExtendedCard: false,
-  protocolVersion: "1.0",
 };
 
 async function main() {

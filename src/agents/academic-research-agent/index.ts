@@ -20,6 +20,7 @@ import {
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
 import { ai } from "./genkit.js";
 import type { ResearchFinding, SourceCitation, ResearchResult } from '../shared/interfaces.js';
+import { flowlogger } from "./../../logger.js";
 
 // --- Local lightweight interfaces for prompt parsing ---
 interface Study {
@@ -52,20 +53,18 @@ interface PromptFindings {
 
 interface UserMessageMinimal { parts?: Array<{ kind: string; text?: string }> }
 
-/* eslint-disable no-console */
-
 // Load the academic research prompt
 const academicPrompt = ai.prompt('academic_research');
 
 if (typeof process.env.GEMINI_API_KEY !== 'string' || process.env.GEMINI_API_KEY.trim() === '') {
-  console.error('GEMINI_API_KEY environment variable not set or empty.');
+  flowlogger.error('GEMINI_API_KEY environment variable not set or empty.');
   process.exit(1);
 }
 
 /**
  * AcademicResearchAgentExecutor implements the agent's core logic for scholarly research.
  */
-class AcademicResearchAgentExecutor implements AgentExecutor {
+export class AcademicResearchAgentExecutor implements AgentExecutor {
   private cancelledTasks = new Set<string>();
 
   constructor() { }
@@ -108,7 +107,7 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
     const contextId = userMessage.contextId ?? existingTask?.contextId ?? uuidv4();
     const researchId = taskId; // For future orchestration integration
 
-    console.log(
+    flowlogger.info(
       `[AcademicResearchAgentExecutor] Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId}, research: ${researchId})`
     );
 
@@ -168,7 +167,7 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
       .filter((m) => m.content.length > 0);
 
     if (messages.length === 0) {
-      console.warn(
+      flowlogger.warn(
         `[AcademicResearchAgentExecutor] No valid text messages found in history for task ${taskId}.`
       );
       const failureUpdate: TaskStatusUpdateEvent = {
@@ -243,7 +242,7 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
       }
 
     } catch (error) {
-      console.error(`[AcademicResearchAgentExecutor] Error processing task ${taskId}:`, error);
+      flowlogger.error({ error, taskId }, `[AcademicResearchAgentExecutor] Error processing task ${taskId}`);
       const failureUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
         taskId,
@@ -276,7 +275,7 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
       return {};
     } catch {
       // Fallback: create a basic findings structure
-      console.warn('[AcademicResearchAgentExecutor] Could not parse academic findings as JSON, using fallback');
+      flowlogger.warn('[AcademicResearchAgentExecutor] Could not parse academic findings as JSON, using fallback');
       return {
         scholarlyFindings: [
           {
@@ -406,7 +405,7 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
       return this.synthesizeAcademicFindingsFromPrompt(query, parsedFindings);
 
     } catch (error) {
-      console.error('Academic research failed:', error);
+      flowlogger.error({ error }, 'Academic research failed');
       throw new Error(`Academic research failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -473,7 +472,7 @@ class AcademicResearchAgentExecutor implements AgentExecutor {
 // --- Server Setup ---
 
 const academicResearchAgentCard: AgentCard = {
-  protocolVersion: '1.0',
+  protocolVersion: '0.3.0',
   name: 'Academic Research Agent',
   description:
     'An agent that conducts rigorous scholarly research, analyzes peer-reviewed literature, and synthesizes academic findings with methodological evaluation.',
@@ -488,25 +487,64 @@ const academicResearchAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: {},
-  security: [],
-  defaultInputModes: ['text'],
-  defaultOutputModes: ['text'],
+  securitySchemes: {
+    apiKey: {
+      type: 'apiKey',
+      name: 'X-API-Key',
+      in: 'header'
+    }
+  },
+  security: [{
+    apiKey: []
+  }],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
   skills: [
     {
       id: 'academic_research',
       name: 'Academic Research',
       description:
         'Conducts comprehensive scholarly research with peer-reviewed literature analysis, citation evaluation, and methodological rigor assessment.',
-      tags: ['academic', 'scholarly', 'peer-review', 'methodology'],
+      tags: ['academic', 'scholarly', 'peer-review', 'methodology', 'literature'],
       examples: [
         'Analyze the current state of research on machine learning ethics',
         'Review scholarly literature on climate change adaptation strategies',
         'Evaluate methodological approaches in educational technology research',
+        'Synthesize findings from recent academic papers on quantum computing'
       ],
-      inputModes: ['text'],
-      outputModes: ['text'],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
     },
+    {
+      id: 'literature_review',
+      name: 'Literature Review',
+      description:
+        'Performs systematic literature reviews, analyzing trends, gaps, and emerging themes in academic research.',
+      tags: ['literature-review', 'systematic', 'trends', 'gaps'],
+      examples: [
+        'Conduct a systematic review of AI in healthcare literature',
+        'Identify research gaps in sustainable energy studies',
+        'Analyze emerging trends in social science research',
+        'Review methodological approaches in clinical trials'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    },
+    {
+      id: 'citation_analysis',
+      name: 'Citation Analysis',
+      description:
+        'Analyzes citation patterns, identifies influential works, and evaluates the impact of academic research.',
+      tags: ['citations', 'impact', 'influence', 'bibliometrics'],
+      examples: [
+        'Analyze citation patterns in machine learning research',
+        'Identify the most influential papers in a field',
+        'Evaluate the academic impact of research institutions',
+        'Track citation trends over time'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    }
   ],
   supportsAuthenticatedExtendedCard: false,
 };
@@ -533,10 +571,10 @@ async function main() {
   const PORT = process.env.ACADEMIC_RESEARCH_AGENT_PORT ?? '41245';
   const portNum = parseInt(PORT, 10) || 41245;
   expressApp.listen(portNum, () => {
-    console.log(`[AcademicResearchAgent] Server started on http://localhost:${portNum}`);
-    console.log(`[AcademicResearchAgent] Agent Card: http://localhost:${portNum}/.well-known/agent-card.json`);
-    console.log('[AcademicResearchAgent] Press Ctrl+C to stop the server');
+    flowlogger.info(`[AcademicResearchAgent] Server started on http://localhost:${portNum}`);
+    flowlogger.info(`[AcademicResearchAgent] Agent Card: http://localhost:${portNum}/.well-known/agent-card.json`);
+    flowlogger.info('[AcademicResearchAgent] Press Ctrl+C to stop the server');
   });
 }
 
-main().catch(console.error);
+main().catch((error) => flowlogger.error({ error }, 'AcademicResearchAgent startup failed'));

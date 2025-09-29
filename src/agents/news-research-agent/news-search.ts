@@ -1,4 +1,5 @@
 import { getJson } from 'serpapi';
+import { flowlogger } from '../../logger.js';
 
 /**
  * News Search Utilities for the News Research Agent
@@ -13,7 +14,7 @@ export class NewsSearchUtils {
     this.newsApiKey = newsApiKey ?? process.env.NEWSAPI_API_KEY;
 
     if (!this.serpApiKey) {
-      console.warn('SERPAPI_API_KEY not set. Google News search functionality will be limited.');
+      flowlogger.warn('SERPAPI_API_KEY not set. Google News search functionality will be limited.');
     }
   }
 
@@ -30,12 +31,12 @@ export class NewsSearchUtils {
         ...this.buildGoogleNewsParams(options)
       };
 
-      console.log(`Performing Google News search for: "${query}"`);
+      flowlogger.info(`Performing Google News search for: "${query}"`);
       const results = await getJson(searchParams);
 
       return this.parseGoogleNewsResults(results, query);
     } catch (error) {
-      console.error('Google News search failed:', error);
+      flowlogger.error({ error }, 'Google News search failed');
       throw new Error(`Google News search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -71,7 +72,7 @@ export class NewsSearchUtils {
 
       const url = `https://newsapi.org/v2/everything?${searchParams.toString()}`;
 
-      console.log(`Performing NewsAPI search for: "${query}"`);
+      flowlogger.info(`Performing NewsAPI search for: "${query}"`);
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -86,7 +87,7 @@ export class NewsSearchUtils {
 
       return this.parseNewsAPIResults(results, query);
     } catch (error) {
-      console.error('NewsAPI search failed:', error);
+      flowlogger.error({ error }, 'NewsAPI search failed');
       // Don't fail completely if NewsAPI is not available
       return {
         query,
@@ -132,7 +133,7 @@ export class NewsSearchUtils {
       }
     } catch (error) {
       // NewsAPI errors are less critical
-      console.warn('NewsAPI search failed:', error);
+      flowlogger.warn({ error }, 'NewsAPI search failed');
     }
 
     // Remove duplicates based on URL similarity
@@ -174,12 +175,12 @@ export class NewsSearchUtils {
         ...this.buildTrendingParams(options)
       };
 
-      console.log('Fetching trending news topics');
+      flowlogger.info('Fetching trending news topics');
       const results = await getJson(searchParams);
 
       return this.parseTrendingResults(results);
     } catch (error) {
-      console.error('Trending topics fetch failed:', error);
+      flowlogger.error({ error }, 'Trending topics fetch failed');
       throw new Error(`Trending topics fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

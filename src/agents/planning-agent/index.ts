@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+
 import express from "express";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -21,6 +21,7 @@ import {
 } from "@a2a-js/sdk/server";
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
 import { ai } from "./genkit.js";
+import { flowlogger } from "./../../logger.js";
 import type {
   ResearchPlan,
   ResearchMethodology,
@@ -83,13 +84,13 @@ export class ResearchPlanner {
    * Execute comprehensive research planning for a given query
    */
   async execute(query: string): Promise<ResearchPlan> {
-    console.log(`ResearchPlanner: Starting research planning for query: "${query}"`);
+  flowlogger.info(`ResearchPlanner: Starting research planning for query: "${query}"`);
 
     try {
       // Step 1: Analyze the research query
-      console.log("ResearchPlanner: Analyzing query...");
+  flowlogger.info("ResearchPlanner: Analyzing query...");
       const queryAnalysis = this.queryAnalyzer.analyzeQuery(query);
-      console.log(`ResearchPlanner: Query analysis complete. Dimensions: ${queryAnalysis.researchDimensions.length}`);
+  flowlogger.info(`ResearchPlanner: Query analysis complete. Dimensions: ${queryAnalysis.researchDimensions.length}`);
 
       // Ensure QueryAnalysis includes a timeline (required by generateComprehensivePlan)
       // If the analyzer omitted timeline, provide a sensible default.
@@ -99,7 +100,7 @@ export class ResearchPlanner {
       };
 
       // Step 2: Select appropriate research methodologies
-      console.log("ResearchPlanner: Selecting methodologies...");
+  flowlogger.info("ResearchPlanner: Selecting methodologies...");
       const analysisInput = {
         scopeDimensions: [] as string[], // Default: empty, to be computed in QueryAnalyzer if needed
         knowledgeGaps: [] as string[], // Default: empty
@@ -109,14 +110,14 @@ export class ResearchPlanner {
         estimatedScope: queryAnalysisWithTimeline.estimatedScope ?? 'broad' as const,
       };
       const methodologies = [this.methodologySelector.selectMethodology(analysisInput, "")];
-      console.log(`ResearchPlanner: Selected ${methodologies.length} methodologies`);
+  flowlogger.info(`ResearchPlanner: Selected ${methodologies.length} methodologies`);
 
       // Ensure we have a valid methodology object with a stable 'approach' field.
       // This avoids "Object is possibly 'undefined'." when accessing methodologies[0].approach.
       const chosenMethodology: ResearchMethodology = methodologies[0] ?? { approach: 'exploratory', justification: '', phases: [], qualityControls: [] };
 
       // Step 3: Identify and prioritize data sources
-      console.log("ResearchPlanner: Identifying data sources...");
+  flowlogger.info("ResearchPlanner: Identifying data sources...");
       // Raw results from the identifier may have loose types (e.g., type: string).
       // Normalize to the canonical ResearchPlan['dataSources'] shape and narrow the
       // `type` field to the allowed union values used across the codebase.
@@ -150,15 +151,15 @@ export class ResearchPlanner {
           })(),
         } as ResearchPlan['dataSources'][number];
       });
-      console.log(`ResearchPlanner: Identified ${dataSources.length} data sources`);
+      flowlogger.info(`ResearchPlanner: Identified ${dataSources.length} data sources`);
 
       // Step 4: Decompose research into executable steps
-      console.log("ResearchPlanner: Decomposing into steps...");
+      flowlogger.info("ResearchPlanner: Decomposing into steps...");
       const researchSteps = this.stepDecomposer.decomposeIntoSteps(queryAnalysis.coreQuestion, chosenMethodology.approach, dataSources, queryAnalysis.researchDimensions, queryAnalysis.estimatedScope);
-      console.log(`ResearchPlanner: Created ${researchSteps.length} research steps`);
+      flowlogger.info(`ResearchPlanner: Created ${researchSteps.length} research steps`);
 
       // Step 5: Assess risks and create mitigation strategies
-      console.log("ResearchPlanner: Assessing risks...");
+      flowlogger.info("ResearchPlanner: Assessing risks...");
       // The assessor may return either an array of RiskFactor or an object { risks, contingencyPlans }.
       // Normalize to an array of risk factors so downstream code has a consistent shape.
       const riskAssessmentRaw = this.riskAssessor.assessRisks(
@@ -171,15 +172,15 @@ export class ResearchPlanner {
       const riskFactors: RiskFactor[] = Array.isArray(riskAssessmentRaw)
         ? riskAssessmentRaw
         : (riskAssessmentRaw?.risks ?? []);
-      console.log(`ResearchPlanner: Identified ${riskFactors.length} risk factors`);
+      flowlogger.info(`ResearchPlanner: Identified ${riskFactors.length} risk factors`);
 
       // Step 6: Create contingency plans
-      console.log("ResearchPlanner: Creating contingency plans...");
+      flowlogger.info("ResearchPlanner: Creating contingency plans...");
       const contingencyPlans = this.contingencyPlanner.createContingencyPlans(riskFactors, dataSources, researchSteps, queryAnalysis.coreQuestion);
-      console.log(`ResearchPlanner: Created ${contingencyPlans.length} contingency plans`);
+      flowlogger.info(`ResearchPlanner: Created ${contingencyPlans.length} contingency plans`);
 
       // Step 7: Generate comprehensive research plan using Genkit
-      console.log("ResearchPlanner: Generating final research plan...");
+      flowlogger.info("ResearchPlanner: Generating final research plan...");
       const finalPlan = await this.generateComprehensivePlan(
         query,
         queryAnalysisWithTimeline,
@@ -191,11 +192,11 @@ export class ResearchPlanner {
         contingencyPlans
       );
 
-      console.log("ResearchPlanner: Research planning complete!");
+      flowlogger.info("ResearchPlanner: Research planning complete!");
       return finalPlan;
 
     } catch (error) {
-      console.error("ResearchPlanner: Error during research planning:", error);
+      flowlogger.error({ error }, "ResearchPlanner: Error during research planning");
       throw new Error(`Research planning failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -253,11 +254,6 @@ export class ResearchPlanner {
     };
   }
 
-  /**
-   * Maps a string methodology to a ResearchMethodology enum value.
-   * @param methodologyString The methodology as a string.
-   * @returns The corresponding ResearchMethodology enum value.
-   */
   private mapMethodologyStringToEnum(methodologyString: string | undefined): ResearchMethodology['approach'] {
     switch (methodologyString?.toLowerCase()) {
       case 'systematic':
@@ -274,11 +270,6 @@ export class ResearchPlanner {
     }
   }
 
-  /**
-   * Maps a string priority ('high', 'medium', 'low') to a number (1, 3, 5).
-   * @param priorityString The priority as a string.
-   * @returns The priority as a number.
-   */
   private mapPriorityStringToNumber(priorityString?: string): 1 | 3 | 5 {
     const p = (priorityString ?? 'medium').toLowerCase();
     switch (p) {
@@ -333,7 +324,7 @@ export class ResearchPlanner {
 /**
  * PlanningAgentExecutor implements the agent's core logic for research planning and strategy development.
  */
-class PlanningAgentExecutor implements AgentExecutor {
+export class PlanningAgentExecutor implements AgentExecutor {
   private cancelledTasks = new Set<string>();
   private researchPlanner: ResearchPlanner;
   // Add a map to store contextId per taskId for use in cancelTask
@@ -387,7 +378,7 @@ class PlanningAgentExecutor implements AgentExecutor {
     // Store contextId in the map for later retrieval in cancelTask
     this.taskContexts.set(taskId, contextId);
 
-    console.log(
+    flowlogger.info(
       `[PlanningAgentExecutor] Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId})`
     );
 
@@ -451,7 +442,7 @@ class PlanningAgentExecutor implements AgentExecutor {
       .filter((m) => m.content.length > 0);
 
     if (messages.length === 0) {
-      console.warn(
+      flowlogger.warn(
         `[PlanningAgentExecutor] No valid text messages found in history for task ${taskId}.`
       );
       const failureUpdate: TaskStatusUpdateEvent = {
@@ -484,7 +475,7 @@ class PlanningAgentExecutor implements AgentExecutor {
       }
 
       // 5. Execute comprehensive research planning using the new components
-      console.log(`[PlanningAgentExecutor] Starting comprehensive planning for: "${userQuery}"`);
+      flowlogger.info(`[PlanningAgentExecutor] Starting comprehensive planning for: "${userQuery}"`);
       const researchPlan = await this.researchPlanner.execute(userQuery);
 
       // 6. Publish status update with planning results
@@ -513,7 +504,7 @@ class PlanningAgentExecutor implements AgentExecutor {
 
       // Check if cancelled
       if (this.cancelledTasks.has(taskId)) {
-        console.log(`[PlanningAgentExecutor] Request cancelled for task: ${taskId}`);
+        flowlogger.info(`[PlanningAgentExecutor] Request cancelled for task: ${taskId}`);
         const cancelledUpdate: TaskStatusUpdateEvent = {
           kind: 'status-update',
           taskId, // shorthand
@@ -561,7 +552,7 @@ class PlanningAgentExecutor implements AgentExecutor {
       eventBus.publish(completionUpdate);
 
     } catch (error) {
-      console.error(`[PlanningAgentExecutor] Error processing task ${taskId}:`, error);
+      flowlogger.error({ error, taskId }, `[PlanningAgentExecutor] Error processing task ${taskId}`);
       const failureUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
         taskId,
@@ -591,8 +582,7 @@ class PlanningAgentExecutor implements AgentExecutor {
       // The prompt returns { researchPlan: {...} } so extract the researchPlan
       return parsed.researchPlan ?? parsed;
     } catch (e) {
-      console.error('[PlanningAgentExecutor] Failed to parse JSON response:', e);
-      console.error('[PlanningAgentExecutor] Raw response:', responseText);
+      flowlogger.error({ error: e, responseText }, '[PlanningAgentExecutor] Failed to parse JSON response');
       // Don't use fake fallback - return error information
       throw new Error(`Failed to parse research plan: ${e instanceof Error ? e.message : 'Invalid JSON response'}`);
     }
@@ -602,7 +592,7 @@ class PlanningAgentExecutor implements AgentExecutor {
 // --- Server Setup ---
 
 const planningAgentCard: AgentCard = {
-  protocolVersion: '0.3.4',
+  protocolVersion: '0.3.0',
   name: 'Planning Agent',
   description:
     'An agent that creates comprehensive, evidence-based research strategies with systematic planning, risk assessment, and execution blueprints.',
@@ -617,26 +607,65 @@ const planningAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: {},
-  security: [],
-  defaultInputModes: ['text'],
-  defaultOutputModes: ['text'],
+  securitySchemes: {
+    apiKey: {
+      type: 'apiKey',
+      name: 'X-API-Key',
+      in: 'header'
+    }
+  },
+  security: [{
+    apiKey: []
+  }],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
   skills: [
     {
       id: 'research_planning',
       name: 'Research Planning',
       description:
         'Creates systematic research strategies with methodology design, data source mapping, execution planning, and risk management.',
-      tags: ['planning', 'strategy', 'methodology', 'research'],
+      tags: ['planning', 'strategy', 'methodology', 'research', 'systematic'],
       examples: [
         'Develop a research plan for market analysis',
         'Create an investigation strategy for technical issues',
         'Design a systematic review methodology',
         'Plan multi-disciplinary research approaches',
+        'Create execution blueprints for complex projects'
       ],
-      inputModes: ['text'],
-      outputModes: ['text'],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
     },
+    {
+      id: 'risk_assessment',
+      name: 'Risk Assessment',
+      description:
+        'Evaluates potential risks in research plans, identifies mitigation strategies, and provides contingency planning.',
+      tags: ['risk', 'assessment', 'mitigation', 'contingency'],
+      examples: [
+        'Assess risks in a new research methodology',
+        'Identify potential challenges in data collection',
+        'Evaluate technical risks in implementation plans',
+        'Develop contingency strategies for research projects'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    },
+    {
+      id: 'methodology_design',
+      name: 'Methodology Design',
+      description:
+        'Designs rigorous research methodologies with appropriate data collection, analysis methods, and validation approaches.',
+      tags: ['methodology', 'design', 'rigor', 'validation'],
+      examples: [
+        'Design a mixed-methods research approach',
+        'Create a statistical analysis methodology',
+        'Develop qualitative research methods',
+        'Design experimental protocols'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    }
   ],
   supportsAuthenticatedExtendedCard: false,
 };
@@ -662,13 +691,13 @@ async function main() {
   // 5. Start the server
   const PORT = process.env.PLANNING_AGENT_PORT ?? 41245;
   expressApp.listen(PORT, () => {
-    console.log(`[PlanningAgent] Server started on http://localhost:${PORT}`);
-    console.log(`[PlanningAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
-    console.log('[PlanningAgent] Press Ctrl+C to stop the server');
+    flowlogger.info(`[PlanningAgent] Server started on http://localhost:${PORT}`);
+    flowlogger.info(`[PlanningAgent] Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
+    flowlogger.info('[PlanningAgent] Press Ctrl+C to stop the server');
   });
 }
 
-main().catch(console.error);
+main().catch((error) => flowlogger.error({ error }, 'PlanningAgent startup failed'));
 
 /**
  * Raw shapes for incoming (untrusted) data used by normalizeResearchPlan.
@@ -899,8 +928,7 @@ function parseResearchPlan(responseText: string): Record<string, unknown> {
     const parsed = JSON.parse(responseText.trim());
     return isRecord(parsed) ? (parsed.researchPlan ?? parsed) as Record<string, unknown> : { researchPlan: parsed } as Record<string, unknown>;
   } catch (e) {
-    console.error('[PlanningAgentExecutor] Failed to parse JSON response:', e);
-    console.error('[PlanningAgentExecutor] Raw response:', responseText);
+    flowlogger.error({ error: e, responseText }, '[PlanningAgentExecutor] Failed to parse JSON response');
     throw new Error(`Failed to parse research plan: ${e instanceof Error ? e.message : 'Invalid JSON response'}`);
   }
 }

@@ -2,13 +2,13 @@ import js from '@eslint/js'
 import tseslint from '@typescript-eslint/eslint-plugin'
 import tsparser from '@typescript-eslint/parser'
 import prettierConfig from 'eslint-config-prettier'
-import googleConfig from "eslint-config-google";
+//import googleConfig from "eslint-config-google";
 import importPlugin from "eslint-plugin-import";
-import jsdoc from "eslint-plugin-jsdoc";
+//import jsdoc from "eslint-plugin-jsdoc";
 
 export default [
   // Apply Google style config so tools won't miss eslint-config-google
-  googleConfig,
+ // googleConfig,
   js.configs.recommended,
   prettierConfig,
   {
@@ -16,7 +16,7 @@ export default [
     plugins: {
       '@typescript-eslint': tseslint,
       import: importPlugin,
-      jsdoc: jsdoc,
+  //    jsdoc: jsdoc,
     },
     languageOptions: {
       parser: tsparser,
@@ -34,7 +34,7 @@ export default [
       'require-jsdoc': 'off', // <--- Add this line to disable require-jsdoc
 
       // Use the recommended rules from eslint-plugin-jsdoc
-      ...jsdoc.configs['recommended'].rules,
+  //    ...jsdoc.configs['recommended'].rules,
       'require-jsdoc': 'off',
       'jsdoc/require-jsdoc': ['off', {
         require: {

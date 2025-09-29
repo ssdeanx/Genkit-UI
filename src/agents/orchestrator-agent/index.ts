@@ -6,6 +6,7 @@ import type {
   AgentCard,
   Task,
   TaskStatusUpdateEvent,
+  TaskArtifactUpdateEvent,
   TextPart,
 } from "@a2a-js/sdk";
 import {
@@ -21,10 +22,12 @@ import { ai } from "./genkit.js";
 import type {
   OrchestrationState,
   ResearchPlan,
-  OrchestrationDecision
+  OrchestrationDecision,
+  ResearchStepResult
 } from "../shared/interfaces.js";
 import { TaskDelegator } from "./task-delegator.js";
-import { A2ACommunicationManager, type A2AStreamEvent } from "./a2a-communication.js";
+import { A2ACommunicationManager } from "./a2a-communication.js";
+import { ErrorRecovery } from "./error-recovery.js";
 import { log } from './logger.js';
 
 /* use centralized logger */
@@ -52,24 +55,16 @@ class OrchestratorAgentExecutor implements AgentExecutor {
   private cancelledTasks = new Set<string>();
   private researchStates = new Map<string, OrchestrationState>();
   private taskDelegator: TaskDelegator;
-  private a2aManager: A2ACommunicationManager;
+  private taskStore: TaskStore;
+  private errorRecovery: ErrorRecovery;
 
-  constructor(taskDelegator: TaskDelegator, a2aManager: A2ACommunicationManager) {
+  constructor(taskDelegator: TaskDelegator, taskStore: TaskStore) {
     this.taskDelegator = taskDelegator;
-    this.a2aManager = a2aManager;
+    this.taskStore = taskStore;
+    this.errorRecovery = new ErrorRecovery(taskDelegator);
   }
 
-  /**
-   * Optional: bridge streamed child-agent events into our event bus if needed
-   */
-  private handleChildAgentStreamEvent(event: A2AStreamEvent, _eventBus: ExecutionEventBus): void {
-    try {
-      // For now, just log; wiring into eventBus can be added safely later
-      log('log', '[stream-event]', event.kind);
-    } catch (e) {
-      log('warn', 'Failed to handle child agent stream event', e);
-    }
-  }
+
 
   public cancelTask = async (
     taskId: string,
@@ -140,6 +135,8 @@ class OrchestratorAgentExecutor implements AgentExecutor {
         artifacts: [],
       };
       eventBus.publish(initialTask);
+      // Store the initial task in the task store for persistence
+      await this.taskStore.save(initialTask);
     }
 
     // 2. Publish "working" status update
@@ -211,7 +208,7 @@ class OrchestratorAgentExecutor implements AgentExecutor {
 
     try {
       // 4. Initialize or load research state
-      let researchState = this.researchStates.get(researchId);
+      let researchState = this.researchStates.get(researchId) ?? await this.loadOrchestrationState(existingTask?.metadata);
       if (!researchState) {
         // This is the first message - expect a research plan from planning agent
         // For now, create a basic state structure
@@ -261,6 +258,11 @@ class OrchestratorAgentExecutor implements AgentExecutor {
 
       // 7. Update research state based on decision
       this.updateResearchState(researchState, orchestrationDecision);
+
+      // Persist updated state
+      if (existingTask?.metadata) {
+        this.persistOrchestrationState(existingTask.metadata as Record<string, unknown>, researchState);
+      }
 
       // 8. Publish status update with orchestration results
       const statusUpdate: TaskStatusUpdateEvent = {
@@ -458,6 +460,9 @@ class OrchestratorAgentExecutor implements AgentExecutor {
         }
       }
 
+      // 9.5. Aggregate artifacts from completed delegated tasks
+      await this.aggregateTaskArtifacts(taskId, contextId, researchState, eventBus);
+
       // 10. Final completion (or timeout)
       const finalProgress = researchState.progress.totalSteps > 0 
         ? (researchState.progress.completedSteps / researchState.progress.totalSteps) * 100 
@@ -485,8 +490,27 @@ class OrchestratorAgentExecutor implements AgentExecutor {
       };
       eventBus.publish(completionUpdate);
 
+      // Store the completed task in the task store for persistence
+      const completedTask: Task = {
+        kind: 'task',
+        id: taskId,
+        contextId,
+        status: {
+          state: 'completed',
+          timestamp: new Date().toISOString(),
+        },
+        history: existingTask?.history ?? [userMessage],
+        metadata: existingTask?.metadata ?? {},
+        artifacts: [],
+      };
+      await this.taskStore.save(completedTask);
+
     } catch (error) {
       log('error', `Error processing task ${taskId}:`, error);
+
+      // Classify the error for better reporting
+      const failureType = this.errorRecovery['classifyFailure'](error);
+
       const failureUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
         taskId,
@@ -497,7 +521,7 @@ class OrchestratorAgentExecutor implements AgentExecutor {
             kind: 'message',
             role: 'agent',
             messageId: uuidv4(),
-            parts: [{ kind: 'text', text: `Orchestration failed: ${error instanceof Error ? error.message : 'Unknown error'}` }],
+            parts: [{ kind: 'text', text: `Orchestration failed (${failureType}): ${error instanceof Error ? error.message : 'Unknown error'}` }],
             taskId,
             contextId,
           },
@@ -507,6 +531,161 @@ class OrchestratorAgentExecutor implements AgentExecutor {
       };
       eventBus.publish(failureUpdate);
     }
+  }
+
+  /**
+   * Persist orchestration state in task metadata for recovery
+   */
+  private persistOrchestrationState(taskMetadata: Record<string, unknown>, researchState: OrchestrationState): void {
+    try {
+      taskMetadata.orchestrationState = JSON.stringify(researchState);
+      taskMetadata.lastOrchestrationUpdate = new Date().toISOString();
+      log('log', `Persisted orchestration state in metadata`);
+    } catch (error) {
+      log('warn', `Failed to persist orchestration state:`, error);
+    }
+  }
+
+  /**
+   * Load orchestration state from task metadata
+   */
+  private loadOrchestrationState(taskMetadata: Record<string, unknown> | undefined): OrchestrationState | null {
+    try {
+      const orchestrationState = taskMetadata?.orchestrationState;
+      if (typeof orchestrationState === 'string') {
+        const parsed = JSON.parse(orchestrationState) as unknown as Record<string, unknown>;
+        // Reconstruct dates from strings
+        if ((Boolean(parsed.startedAt)) && typeof parsed.startedAt === 'string') {
+          parsed.startedAt = new Date(parsed.startedAt);
+        }
+        if ((Boolean(parsed.lastUpdated)) && typeof parsed.lastUpdated === 'string') {
+          parsed.lastUpdated = new Date(parsed.lastUpdated);
+        }
+        if ((Boolean(parsed.plan)) && typeof parsed.plan === 'object' && parsed.plan !== null) {
+          const plan = parsed.plan as Record<string, unknown>;
+          if ((Boolean(plan.createdAt)) && typeof plan.createdAt === 'string') {
+            plan.createdAt = new Date(plan.createdAt);
+          }
+          if ((Boolean(plan.updatedAt)) && typeof plan.updatedAt === 'string') {
+            plan.updatedAt = new Date(plan.updatedAt);
+          }
+        }
+
+        log('log', `Loaded orchestration state from metadata`);
+        return parsed as unknown as OrchestrationState;
+      }
+    } catch (error) {
+      log('warn', `Failed to load orchestration state from metadata:`, error);
+    }
+    return null;
+  }
+  private async aggregateTaskArtifacts(
+    taskId: string,
+    contextId: string,
+    researchState: OrchestrationState,
+    eventBus: ExecutionEventBus
+  ): Promise<void> {
+    for (const stepResult of researchState.completedSteps) {
+      try {
+        // Extract artifacts from the step result data
+        const artifacts = this.extractArtifactsFromStepResult(stepResult);
+
+        // Publish each artifact
+        for (const artifact of artifacts) {
+          const artifactUpdate: TaskArtifactUpdateEvent = {
+            kind: 'artifact-update',
+            taskId,
+            contextId,
+            artifact: {
+              artifactId: `${stepResult.stepId}-${artifact.name}`,
+              name: artifact.name,
+              parts: artifact.parts,
+            },
+            append: false,
+            lastChunk: true,
+          };
+          eventBus.publish(artifactUpdate);
+        }
+
+        log('log', `Published ${artifacts.length} artifacts from step ${stepResult.stepId}`);
+      } catch (error) {
+        log('warn', `Failed to aggregate artifacts from step ${stepResult.stepId}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Extract artifacts from a research step result
+   */
+  private extractArtifactsFromStepResult(stepResult: ResearchStepResult): Array<{name: string, parts: TextPart[]}> {
+    const artifacts: Array<{name: string, parts: TextPart[]}> = [];
+
+    try {
+      const { data, stepId } = stepResult;
+
+      if (data === null) {
+        return artifacts;
+      }
+
+      // Handle different result types based on the data structure
+      if (typeof data === 'object' && data !== null) {
+        const dataObj = data as Record<string, unknown>;
+
+        // Handle code generation results (files array)
+        if ('files' in dataObj && Array.isArray(dataObj.files)) {
+          for (const file of dataObj.files) {
+            if (file !== null && typeof file === 'object' && 'filename' in file && 'content' in file) {
+              const fileObj = file as Record<string, unknown>;
+              artifacts.push({
+                name: String(fileObj.filename ?? `file-${artifacts.length}`),
+                parts: [{ kind: 'text', text: String(fileObj.content ?? '') }],
+              });
+            }
+          }
+        }
+        // Handle research findings
+        else if ('findings' in dataObj && Array.isArray(dataObj.findings)) {
+          artifacts.push({
+            name: `research-findings-${stepId}`,
+            parts: [{ kind: 'text', text: JSON.stringify(dataObj.findings, null, 2) }],
+          });
+        }
+        // Handle data analysis results
+        else if ('data' in dataObj) {
+          artifacts.push({
+            name: `analysis-data-${stepId}`,
+            parts: [{ kind: 'text', text: JSON.stringify(dataObj.data, null, 2) }],
+          });
+        }
+        // Handle synthesis results
+        else if ('synthesis' in dataObj) {
+          artifacts.push({
+            name: `synthesis-${stepId}`,
+            parts: [{ kind: 'text', text: String(dataObj.synthesis) }],
+          });
+        }
+        // Handle sources
+        else if ('sources' in dataObj && Array.isArray(dataObj.sources)) {
+          artifacts.push({
+            name: `sources-${stepId}`,
+            parts: [{ kind: 'text', text: JSON.stringify(dataObj.sources, null, 2) }],
+          });
+        }
+      }
+
+      // If no specific structure matched, create a generic artifact
+      if (artifacts.length === 0) {
+        artifacts.push({
+          name: `result-${stepId}`,
+          parts: [{ kind: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }],
+        });
+      }
+
+    } catch (error) {
+      log('warn', `Error extracting artifacts from step result ${stepResult.stepId}:`, error);
+    }
+
+    return artifacts;
   }
 
   private parseOrchestrationDecision(responseText: string): OrchestrationDecision {
@@ -574,7 +753,7 @@ class OrchestratorAgentExecutor implements AgentExecutor {
 const orchestratorAgentCard: AgentCard = {
   // A2A protocol version must match the SDK major/minor we target
   // Aligning to @a2a-js/sdk v0.3.4
-  protocolVersion: '0.3.4',
+  protocolVersion: '0.3.0',
   name: 'Research Orchestrator Agent',
   description:
     'An agent that coordinates multi-agent research execution, manages research state, and optimizes task distribution across specialized research agents.',
@@ -589,25 +768,62 @@ const orchestratorAgentCard: AgentCard = {
     pushNotifications: false,
     stateTransitionHistory: true,
   },
-  securitySchemes: {},
-  security: [],
-  defaultInputModes: ['text'],
-  defaultOutputModes: ['text'],
+  securitySchemes: {
+    apiKey: {
+      type: 'apiKey',
+      name: 'X-API-Key',
+      in: 'header'
+    }
+  },
+  security: [{
+    apiKey: []
+  }],
+  defaultInputModes: ['text/plain'],
+  defaultOutputModes: ['text/plain'],
   skills: [
     {
       id: 'research_orchestration',
       name: 'Research Orchestration',
       description:
         'Coordinates complex research tasks across multiple specialized agents, managing dependencies, quality assurance, and progress tracking.',
-      tags: ['research', 'coordination', 'multi-agent', 'planning'],
+      tags: ['research', 'coordination', 'multi-agent', 'planning', 'orchestration'],
       examples: [
         'Execute this research plan across web, academic, and news research agents.',
         'Monitor research progress and reassign tasks based on agent performance.',
         'Synthesize findings from multiple research streams into coherent results.',
+        'Coordinate parallel research tasks with dependency management.'
       ],
-      inputModes: ['text'],
-      outputModes: ['text'],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
     },
+    {
+      id: 'task_delegation',
+      name: 'Task Delegation',
+      description:
+        'Intelligently delegates research tasks to appropriate specialized agents based on task requirements and agent capabilities.',
+      tags: ['delegation', 'task-management', 'optimization', 'routing'],
+      examples: [
+        'Delegate web research tasks to the web research agent',
+        'Assign academic paper analysis to the academic research agent',
+        'Route news monitoring tasks to the news research agent'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    },
+    {
+      id: 'quality_assurance',
+      name: 'Quality Assurance',
+      description:
+        'Validates research outputs, ensures consistency across agents, and provides quality metrics for research tasks.',
+      tags: ['quality', 'validation', 'metrics', 'assurance'],
+      examples: [
+        'Validate the quality of research findings from multiple sources',
+        'Check consistency across different research agent outputs',
+        'Generate quality metrics for completed research tasks'
+      ],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain'],
+    }
   ],
   supportsAuthenticatedExtendedCard: false,
 };
@@ -623,7 +839,7 @@ async function main() {
   const taskDelegator = new TaskDelegator(a2aManager);
 
   // 4. Create AgentExecutor
-  const agentExecutor: AgentExecutor = new OrchestratorAgentExecutor(taskDelegator, a2aManager);
+  const agentExecutor: AgentExecutor = new OrchestratorAgentExecutor(taskDelegator, taskStore);
 
   // 5. Create DefaultRequestHandler
   const requestHandler = new DefaultRequestHandler(
