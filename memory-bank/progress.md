@@ -2,6 +2,7 @@
 
 What works
 
+- **Coder & Content-Editor Agents**: Tests for both agents are now passing. The `coder` agent includes a new resilient fallback mechanism. The `content-editor` agent now correctly implements DotPrompt loading.
 - **Dual Backend Architecture**: Genkit flows (HTTP/FlowServer + Firebase Functions) and A2A agents (8 specialized agents) both functional
 - **Genkit UI**: Starts and displays flows from [src/index.ts](../src/index.ts)
 - **Flow Server**: HTTP server exposing flows on port 3400 with CORS
@@ -25,7 +26,6 @@ What's left
 
 Known issues / risks
 
-- **Schema Validation**: Coder agent test failing due to mock response mismatch with CodeMessageSchema
 - **External Dependencies**: Toolbox and external APIs may be unreliable in production
 - **A2A Protocol Maturity**: @a2a-js/sdk in beta - potential breaking changes
 - **Deployment Complexity**: Coordinating Firebase App Hosting + Functions with A2A agents
@@ -33,8 +33,10 @@ Known issues / risks
 
 Recent updates
 
+- 2025-09-29: Session concluded. `coder` and `content-editor` agent tests are now passing. `TASK009` is complete.
 - 2025-09-28: Memory Bank updated with comprehensive project architecture understanding
 - 2025-09-28: Dual backend pattern documented (flows via HTTP/Firebase + A2A agents)
 - 2025-09-28: Firebase deployment strategy clarified (App Hosting + Functions)
 - 2025-09-28: Toolbox integration documented (7 PostgreSQL tools running locally)
 - 2025-09-28: Architecture patterns established distinguishing flows vs agents usage
+- 2025-09-29: Consolidated A2A URLs to docs/a2a.md as the single source of truth; removed duplicates from Memory Bank

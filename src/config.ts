@@ -33,21 +33,19 @@ export const ai = genkit({
     stream: true,
     output: { format: 'json' },
     safetySettings: [],
-
     thinkingConfig: { thinkingBudget: -1, showThoughts: true }, // Enable thinking process for debugging
     mediaResolution: 'MEDIA_RESOLUTION_LOW',
     responseMimeType: 'application/json',
     imageGenerationConfig: { maxImages: 1, imageSize: 'IMAGE_SIZE_512' },
     responseMedia: ['TEXT', 'IMAGE'],
-    // This is a comment
     entityExtractionConfig: { enabled: true, modelVersion: 'ENTITY_EXTRACTION_MODEL_VERSION_V1' },
-    // Another comment
     config: {
       tools: [{ googleSearch: {} }],
     },
   }),
 });
 
+export { z } from 'genkit';
 // Export the configured index name so flows can reference it explicitly
 export const VECTORSTORE_INDEX = process.env.VECTORSTORE_INDEX ?? 'Based';
 

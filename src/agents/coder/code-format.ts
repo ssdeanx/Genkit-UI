@@ -1,4 +1,5 @@
-import { GenkitBeta, z } from "genkit/beta";
+import type { GenkitBeta} from "genkit/beta";
+import { z } from "genkit/beta";
 
 export const CodeMessageSchema = z.object({
   files: z.array(
@@ -30,19 +31,19 @@ export class CodeMessage implements CodeMessageData {
 
   /** Returns the first file's preamble. */
   get preamble() {
-    return this.data.files[0]?.preamble || "";
+    return this.data.files[0]?.preamble ?? "";
   }
   /** Returns the first file's filename. */
   get filename() {
-    return this.data.files[0]?.filename || "";
+    return this.data.files[0]?.filename ?? "";
   }
   /** Returns the first file's language. */
   get language() {
-    return this.data.files[0]?.language || "";
+    return this.data.files[0]?.language ?? "";
   }
   /** Returns the first file's content. */
   get content() {
-    return this.data.files[0]?.content || "";
+    return this.data.files[0]?.content ?? "";
   }
 
   toJSON(): CodeMessageData {
@@ -103,7 +104,13 @@ function extractCode(source: string): CodeMessageData {
         }
     else if (files.length > 0) {
             const last = files[files.length - 1];
-            if (last && last.content) {
+            // Explicitly handle nullable/empty string for last.content per coding rules.
+            // Treat non-empty trimmed content as indicating postamble; otherwise treat as preamble.
+            if (
+              last &&
+              typeof last.content === "string" &&
+              last.content.trim().length > 0
+            ) {
               postamble += line + "\n";
             } else {
               // Otherwise this is preamble for the next file

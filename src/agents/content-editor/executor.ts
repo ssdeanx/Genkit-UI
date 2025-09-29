@@ -1,15 +1,29 @@
+import type {
+  AgentExecutor,
+  ExecutionEventBus,
+  RequestContext,
+} from '@a2a-js/sdk/server';
+import type {
+  Artifact,
+  Message,
+  Task,
+  TaskArtifactUpdateEvent,
+  TaskStatusUpdateEvent,
+  TextPart,
+} from '@a2a-js/sdk';
+import type { MessageData } from '@genkit-ai/ai/model';
+import { loadPrompt } from 'genkit';
 import { v4 as uuidv4 } from 'uuid';
-import type { MessageData } from 'genkit';
-import type { Task, TaskStatusUpdateEvent, TextPart, Message } from '@a2a-js/sdk';
-import type { AgentExecutor, ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server';
 import { ai } from './genkit.js';
+import { flowlogger } from '../../logger.js';
 
-const contentEditorPrompt = ai.prompt('content_editor');
-
-export class ContentEditorAgentExecutor implements AgentExecutor {
+export class ContentEditorExecutor implements AgentExecutor {
   private cancelledTasks = new Set<string>();
 
-  public cancelTask = async (taskId: string, eventBus: ExecutionEventBus): Promise<void> => {
+  async cancelTask(
+    taskId: string,
+    eventBus: ExecutionEventBus
+  ): Promise<void> {
     this.cancelledTasks.add(taskId);
     const cancelledUpdate: TaskStatusUpdateEvent = {
       kind: 'status-update',
@@ -30,25 +44,30 @@ export class ContentEditorAgentExecutor implements AgentExecutor {
       final: true,
     };
     eventBus.publish(cancelledUpdate);
-  };
+  }
 
-  async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
-    const { userMessage } = requestContext;
-    const existingTask = requestContext.task;
+  async execute(
+    requestContext: RequestContext,
+    eventBus: ExecutionEventBus
+  ): Promise<void> {
+    if (!requestContext.task) {
+      // In a real app, you'd want to publish a failure state to the event bus.
+      // logging is set up to use flowlogger
+      flowlogger.error('Task is missing in request context');
+      return;
+    }
+    const { task, userMessage } = requestContext;
+    const taskId = task.id;
+    const contextId = task.contextId;
 
-    const taskId = existingTask?.id ?? uuidv4();
-    const contextId = (userMessage.contextId ?? existingTask?.contextId) ?? uuidv4();
+    const historyForGenkit: Message[] = task.history ?? [];
 
-    if (!existingTask) {
-      const initialTask: Task = {
-        kind: 'task',
-        id: taskId,
-        contextId,
-        status: { state: 'submitted', timestamp: new Date().toISOString() },
-        history: [userMessage],
-        metadata: userMessage.metadata ?? {},
-      };
-      eventBus.publish(initialTask);
+    // Ensure user message is in history
+    const messageExists = historyForGenkit.some(
+      (m) => m.messageId === userMessage.messageId
+    );
+    if (!messageExists) {
+      historyForGenkit.push(userMessage);
     }
 
     const workingStatusUpdate: TaskStatusUpdateEvent = {
@@ -71,136 +90,66 @@ export class ContentEditorAgentExecutor implements AgentExecutor {
     };
     eventBus.publish(workingStatusUpdate);
 
-    const historyForGenkit = existingTask?.history ? [...existingTask.history] : [];
-    if (!historyForGenkit.find((m) => m.messageId === userMessage.messageId)) {
-      historyForGenkit.push(userMessage);
-    }
-
-    // Replace mapping to satisfy MessageData typing: explicitly type role and content
-    const messages: MessageData[] = historyForGenkit
-      .map((m) => {
-        const role: MessageData['role'] = m.role === 'agent' ? 'model' : 'user';
-        const content = m.parts
-          .filter((p): p is TextPart => p.kind === 'text' && !!(p).text)
-          .map((p) => ({ text: p.text })) as MessageData['content'];
-        return { role, content } as MessageData;
-      })
-      .filter((m) => m.content.length > 0);
-
-    if (messages.length === 0) {
-      const failureUpdate: TaskStatusUpdateEvent = {
-        kind: 'status-update',
-        taskId,
-        contextId,
-        status: {
-          state: 'failed',
-          message: {
-            kind: 'message',
-            role: 'agent',
-            messageId: uuidv4(),
-            parts: [{ kind: 'text', text: 'No message found to process.' }],
-            taskId,
-            contextId,
-          },
-          timestamp: new Date().toISOString(),
-        },
-        final: true,
-      };
-      eventBus.publish(failureUpdate);
-      return;
-    }
-
     try {
-      const response = await contentEditorPrompt({}, { messages });
-
       if (this.cancelledTasks.has(taskId)) {
-        const cancelledUpdate: TaskStatusUpdateEvent = {
-          kind: 'status-update',
-          taskId,
-          contextId,
-          status: { state: 'canceled', timestamp: new Date().toISOString() },
-          final: true,
-        };
-        eventBus.publish(cancelledUpdate);
-        return;
+        throw new Error('Task was cancelled');
       }
 
-      // Helper: safely extract a text string from various possible response shapes
-      const extractTextFromResponse = (resp: unknown): string | undefined => {
-        if (typeof resp === 'string') {
-          return resp;
-        }
-        if (resp === null || typeof resp !== 'object') {
-          return undefined;
-        }
-        const obj = resp as Record<string, unknown>;
+      const contentEditorPrompt = await loadPrompt({
+        name: 'content_editor',
+      });
 
-        // common shapes
-        if (typeof obj.text === 'string') {
-          return obj.text;
-        }
-        if (typeof obj.output === 'string') {
-          return obj.output;
-        }
+      const llmResponse = await ai.generate({
+        prompt: await contentEditorPrompt.render({
+          context: {
+            input: (userMessage.parts[0] as TextPart).text,
+          },
+        }),
+      });
 
-        // nested output.text
-        const out = obj.output;
-        // Explicitly check for undefined/null before using typeof to avoid implicit any in the conditional
-        if (out !== undefined && out !== null && typeof out === 'object') {
-          const outObj = out as Record<string, unknown>;
-          if (typeof outObj.text === 'string') {
-            return outObj.text;
-          }
-        }
+      const editedText = llmResponse.text;
 
-        // OpenAI style
-        const {choices} = obj;
-        if (Array.isArray(choices) && choices.length > 0) {
-          const first = choices[0];
-          if (typeof first === 'string') {
-            return first;
-          }
-          if ((Boolean(first)) && typeof first === 'object') {
-            const firstObj = first as Record<string, unknown>;
-            if (typeof firstObj.text === 'string') {
-              return firstObj.text;
-            }
-            if (typeof firstObj.message === 'string') {
-              return firstObj.message;
-            }
-            if ((Boolean(firstObj.message)) && typeof firstObj.message === 'object') {
-              const m = firstObj.message as Record<string, unknown>;
-              if (typeof m.text === 'string') {
-                return m.text;
-              }
-            }
-          }
-        }
-
-        return undefined;
+      const artifact: Artifact = {
+        artifactId: 'edited-content.txt',
+        name: 'edited-content.txt',
+        parts: [{ kind: 'text', text: editedText }],
       };
 
-      const responseText = extractTextFromResponse(response);
-      const agentMessage: Message = {
-        kind: 'message',
-        role: 'agent',
-        messageId: uuidv4(),
-        parts: [{ kind: 'text', text: responseText ?? 'Completed.' }],
+      const artifactUpdate: TaskArtifactUpdateEvent = {
+        kind: 'artifact-update',
         taskId,
         contextId,
+        artifact,
       };
+      eventBus.publish(artifactUpdate);
 
-      const finalUpdate: TaskStatusUpdateEvent = {
+      const completedStatusUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
         taskId,
         contextId,
-        status: { state: 'completed', message: agentMessage, timestamp: new Date().toISOString() },
+        status: {
+          state: 'completed',
+          message: {
+            kind: 'message',
+            role: 'agent',
+            messageId: uuidv4(),
+            parts: [{ kind: 'text', text: 'Content editing complete.' }],
+            taskId,
+            contextId,
+          },
+          timestamp: new Date().toISOString(),
+        },
         final: true,
       };
-      eventBus.publish(finalUpdate);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      const errorUpdate: TaskStatusUpdateEvent = {
+      eventBus.publish(completedStatusUpdate);
+    } catch (err) {
+      const error = err as Error;
+      const errorMessage =
+        'An unexpected error occurred during content editing.';
+
+      flowlogger.error(`Content editing failed: ${error.message}`);
+
+      const failedStatusUpdate: TaskStatusUpdateEvent = {
         kind: 'status-update',
         taskId,
         contextId,
@@ -210,7 +159,7 @@ export class ContentEditorAgentExecutor implements AgentExecutor {
             kind: 'message',
             role: 'agent',
             messageId: uuidv4(),
-            parts: [{ kind: 'text', text: `Agent error: ${errorMessage}` }],
+            parts: [{ kind: 'text', text: errorMessage }],
             taskId,
             contextId,
           },
@@ -218,9 +167,9 @@ export class ContentEditorAgentExecutor implements AgentExecutor {
         },
         final: true,
       };
-      eventBus.publish(errorUpdate);
+      eventBus.publish(failedStatusUpdate);
     }
   }
 }
 
-export default ContentEditorAgentExecutor;
+export default ContentEditorExecutor;

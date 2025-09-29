@@ -78,8 +78,6 @@ Key technologies: TypeScript ^5.9.2, Genkit ^1.20.0, @a2a-js/sdk ^0.3.4, Zod ^4.
 
 ## Testing Instructions
 
-- Run all tests: `npm test` (Vitest; covers units in `src/**/__tests__` and flow tests like `weatherFlow.test.ts`).
-- Run specific tests: `npm test -- --testPathPattern=flows` or `npm test -- --testPathPattern=orchestrator`.
 - Local mocking conventions: Use `vi.mock` to mock Genkit `ai`, A2A eventBus, external APIs (wikipedia, weather).
 - Add tests: For new code, add to `__tests__/` with describe/it/expect; mock dependencies to isolate units.
 
@@ -170,7 +168,6 @@ Key technologies: TypeScript ^5.9.2, Genkit ^1.20.0, @a2a-js/sdk ^0.3.4, Zod ^4.
 | [planningFlow.ts](src/flows/planningFlow.ts) | TypeScript | Flow for planning tasks. |
 | [ragFlow.ts](src/flows/ragFlow.ts) | TypeScript | Retrieval-augmented generation flow. |
 | [recipeGeneratorFlow.ts](src/flows/recipeGeneratorFlow.ts) | TypeScript | Flow for generating recipes with Zod validation. |
-| [weatherFlow.test.ts](src/flows/weatherFlow.test.ts) | TypeScript | Vitest tests for weatherFlow with tool mocking. |
 | [weatherFlow.ts](src/flows/weatherFlow.ts) | TypeScript | Flow for weather reports integrating weatherTool. |
 | [webResearchFlow.ts](src/flows/webResearchFlow.ts) | TypeScript | Flow for web research. |
 
@@ -230,7 +227,6 @@ Key technologies: TypeScript ^5.9.2, Genkit ^1.20.0, @a2a-js/sdk ^0.3.4, Zod ^4.
 
 | File/Folder | Type | Description |
 |-------------|------|-------------|
-| [.eslintrc.js](functions/.eslintrc.js) | JavaScript | ESLint config for functions. |
 | [.gitignore](functions/.gitignore) | Gitignore | Git ignore for functions. |
 | [node_modules/](functions/node_modules/) | Directory | Node modules for functions. |
 | [package-lock.json](functions/package-lock.json) | JSON | Package lock for functions. |
@@ -238,13 +234,3 @@ Key technologies: TypeScript ^5.9.2, Genkit ^1.20.0, @a2a-js/sdk ^0.3.4, Zod ^4.
 | [src/](functions/src/) | Directory | Source code for Firebase functions. |
 | [tsconfig.dev.json](functions/tsconfig.dev.json) | JSON | Dev TypeScript config for functions. |
 | [tsconfig.json](functions/tsconfig.json) | JSON | TypeScript config for functions. |
-
-## Where to look next
-
-- Agent-specific docs under `docs/components` (academic-research-agent-documentation.md, orchestrator-agent-documentation.md, etc.)
-- Agent code under `src/agents/*` for executor logic and A2A wiring
-- Flow examples in `src/flows` for patterns used across the repo
-
----
-
-If you want, I can also: generate a checklist of tests to add when modifying an agent, add an example AgentCard JSON for orchestrator, or create an AGENTS.md tailored to a single agent (e.g., `src/agents/orchestrator-agent/AGENTS.md`).

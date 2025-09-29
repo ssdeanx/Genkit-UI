@@ -1,6 +1,15 @@
+---
+applyTo: 'src/agents/**'
+tags: 'a2a', 'architecture', 'design', 'agents-cards', 'protocol', 'executor', 'client', 'express', 'sse', 'streaming'
+title: 'A2A — Genkit-UI'
+slug: 'a2a'
+date: '2025-09-29'
+author: 'sam'
+summary: 'Documentation of the A2A protocol implementation in Genkit-UI using @a2a-js/sdk, covering architecture, key files, concepts, and patterns.'
+---
 # A2A — Genkit-UI
 
-This project uses [@a2a-js/sdk](https://github.com/a2aproject/a2a-js) as a dependency to facilitate communication between the frontend and backend.
+This project uses [@a2a-js/sdk](https://github.com/a2aproject/a2a-js) as a dependency to facilitate communication between the frontend and backend. The A2A protocol is implemented in the agents. Genkit is in beta, and the A2A protocol is also evolving, so expect some breaking changes in the future.  Knowing the A2A protocol and SDK is essential for working with the agents and their executors especially if planning to also use agents with our flows or other Genkit parts of the system.
 
 ## Key Files
 
@@ -18,7 +27,9 @@ This project uses [@a2a-js/sdk](https://github.com/a2aproject/a2a-js) as a depen
 - [A2A Error](https://github.com/a2aproject/a2a-js/blob/main/src/server/error.ts)
 - [A2A Store](https://github.com/a2aproject/a2a-js/blob/main/src/server/store.ts)
 
-https://a2aprotocol.ai/docs/guide/a2a-javascript-sdk
-https://a2aprotocol.ai/docs/guide/a2a-typescript-guide
-https://a2aprotocol.ai/blog/a2a-typescript-guide
-https://a2aprotocol.ai/blog/a2a-javascript-sdk
+## Key Concepts
+
+- [A2A JavaScript SDK](https://a2aprotocol.ai/docs/guide/a2a-javascript-sdk)
+- [A2A TypeScript Guide](https://a2aprotocol.ai/docs/guide/a2a-typescript-guide)
+- [A2A TypeScript Blog](https://a2aprotocol.ai/blog/a2a-typescript-guide)
+- [A2A JavaScript Blog](https://a2aprotocol.ai/blog/a2a-javascript-sdk)
