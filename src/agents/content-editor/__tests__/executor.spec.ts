@@ -6,6 +6,7 @@ import type {
 import type {
   Task,
   TaskStatusUpdateEvent,
+  TaskArtifactUpdateEvent,
   TextPart,
 } from '@a2a-js/sdk';
 import { ContentEditorExecutor } from '../executor.js';
@@ -17,7 +18,7 @@ vi.mock('../genkit.js', () => ({
   },
 }));
 
-type A2AEvent = TaskStatusUpdateEvent | Task;
+type A2AEvent = TaskStatusUpdateEvent | Task | TaskArtifactUpdateEvent;
 
 describe('ContentEditorAgentExecutor', () => {
   let executor: ContentEditorExecutor;
@@ -58,7 +59,7 @@ describe('ContentEditorAgentExecutor', () => {
 
   it('executes and publishes completion with edited content', async () => {
     const editedText = 'This is the edited content.';
-    (ai.prompt as Mock).mockReturnValue(async () => ({
+    (ai.prompt as Mock).mockReturnValue(vi.fn().mockResolvedValue({
       text: editedText,
     }));
 
@@ -80,11 +81,16 @@ describe('ContentEditorAgentExecutor', () => {
     );
     expect(completedCall).toBeDefined();
 
-    const completedEvent = completedCall?.[0] as TaskStatusUpdateEvent;
-    const messagePart = completedEvent?.status?.message?.parts[0] as
-      | TextPart
-      | undefined;
-    expect(messagePart?.text).toBe(editedText);
+    // Check that an artifact was published with the edited content
+    const artifactCall = (
+      (mockEventBus.publish as Mock).mock.calls as Array<[A2AEvent]>
+    ).find(
+      (call) => (call[0] as TaskArtifactUpdateEvent).kind === 'artifact-update'
+    );
+    expect(artifactCall).toBeDefined();
+
+    const artifactEvent = artifactCall?.[0] as TaskArtifactUpdateEvent;
+    expect((artifactEvent.artifact.parts[0] as TextPart).text).toBe(editedText);
   });
 
   it('publishes a failed status if the input message is empty', async () => {
@@ -109,11 +115,9 @@ describe('ContentEditorAgentExecutor', () => {
     expect(messagePart?.text).toBe('No message found to process.');
   });
 
-  it('publishes a failed status if the AI prompt throws an error', async () => {
+  it('handles AI prompt failure', async () => {
     const errorMessage = 'AI prompt failed';
-    (ai.prompt as Mock).mockImplementation(async () => {
-      throw new Error(errorMessage);
-    });
+    (ai.prompt as Mock).mockReturnValue(vi.fn().mockRejectedValue(new Error(errorMessage)));
 
     await executor.execute(mockRequestContext, mockEventBus);
 
@@ -123,12 +127,11 @@ describe('ContentEditorAgentExecutor', () => {
       (call) => (call[0] as TaskStatusUpdateEvent).status?.state === 'failed'
     );
     expect(failedCall).toBeDefined();
-
     const failedEvent = failedCall?.[0] as TaskStatusUpdateEvent;
     const messagePart = failedEvent?.status?.message?.parts[0] as
       | TextPart
       | undefined;
-    expect(messagePart?.text).toContain(errorMessage);
+    expect(messagePart?.text).toContain('An unexpected error occurred during content editing');
   });
 
   it('cancelTask publishes a canceled status', async () => {

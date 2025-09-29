@@ -1,6 +1,6 @@
 import type { OrchestrationState, ResearchStepExecution, ProgressUpdate, A2AMessage } from '../shared/interfaces.js';
 import type { Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent } from '@a2a-js/sdk';
-import { log } from './logger.js';
+import { log } from '../../logger.js';
 import type { EventEmitter } from 'events';
 
 /**
@@ -196,7 +196,7 @@ export class StreamingHandler {
     let stepId: string | undefined;
     let status: ResearchStepExecution['status'] = 'running';
     let messageText = '';
-    let eta = 0;
+    const eta = 0;
     if (event.kind === 'message') {
       researchId = event.taskId ?? undefined;
       messageText = event.parts?.find(p => p.kind === 'text')?.text ?? 'Message';
@@ -221,7 +221,7 @@ export class StreamingHandler {
       status = 'running';
     }
 
-    if (!researchId) {
+    if (researchId === undefined) {
       return;
     }
     const session = this.activeStreams.get(researchId);
@@ -381,7 +381,10 @@ export class StreamingHandler {
     for (const [researchId, session] of this.activeStreams.entries()) {
       if (now - session.lastUpdate.getTime() > maxAge) {
         log('log', `Cleaning up inactive stream for research ${researchId}`);
-        this.endStream(researchId, 'cancelled');
+        // Remove immediately for cleanup
+        this.activeStreams.delete(researchId);
+        this.progressBuffers.delete(researchId);
+        this.streamSubscribers.delete(researchId);
       }
     }
   }

@@ -6,13 +6,10 @@ import type {
 import type {
   Artifact,
   Message,
-  Task,
   TaskArtifactUpdateEvent,
   TaskStatusUpdateEvent,
   TextPart,
 } from '@a2a-js/sdk';
-import type { MessageData } from '@genkit-ai/ai/model';
-import { loadPrompt } from 'genkit';
 import { v4 as uuidv4 } from 'uuid';
 import { ai } from './genkit.js';
 import { flowlogger } from '../../logger.js';
@@ -60,6 +57,30 @@ export class ContentEditorExecutor implements AgentExecutor {
     const taskId = task.id;
     const contextId = task.contextId;
 
+    // Validate input
+    if (userMessage.parts.length === 0) {
+      const failedStatusUpdate: TaskStatusUpdateEvent = {
+        kind: 'status-update',
+        taskId,
+        contextId,
+        status: {
+          state: 'failed',
+          message: {
+            kind: 'message',
+            role: 'agent',
+            messageId: uuidv4(),
+            parts: [{ kind: 'text', text: 'No message found to process.' }],
+            taskId,
+            contextId,
+          },
+          timestamp: new Date().toISOString(),
+        },
+        final: true,
+      };
+      eventBus.publish(failedStatusUpdate);
+      return;
+    }
+
     const historyForGenkit: Message[] = task.history ?? [];
 
     // Ensure user message is in history
@@ -95,19 +116,13 @@ export class ContentEditorExecutor implements AgentExecutor {
         throw new Error('Task was cancelled');
       }
 
-      const contentEditorPrompt = await loadPrompt({
-        name: 'content_editor',
+      const contentEditorPrompt = ai.prompt('content_editor');
+
+      const response = await contentEditorPrompt({
+        content: (userMessage.parts[0] as TextPart).text,
       });
 
-      const llmResponse = await ai.generate({
-        prompt: await contentEditorPrompt.render({
-          context: {
-            input: (userMessage.parts[0] as TextPart).text,
-          },
-        }),
-      });
-
-      const editedText = llmResponse.text;
+      const editedText = response?.output?.edited ?? response?.text ?? 'No content generated';
 
       const artifact: Artifact = {
         artifactId: 'edited-content.txt',
@@ -145,7 +160,7 @@ export class ContentEditorExecutor implements AgentExecutor {
     } catch (err) {
       const error = err as Error;
       const errorMessage =
-        'An unexpected error occurred during content editing.';
+        `An unexpected error occurred during content editing: ${error.message}`;
 
       flowlogger.error(`Content editing failed: ${error.message}`);
 

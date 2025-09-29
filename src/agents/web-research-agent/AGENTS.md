@@ -25,7 +25,7 @@ This agent conducts thorough web-based research by:
 ### Environment Variables
 
 - `GEMINI_API_KEY`: Required for AI model access
-- `WEB_RESEARCH_AGENT_PORT`: Port for the agent server (default: 41244)
+- `WEB_RESEARCH_AGENT_PORT`: Port for the agent server (default: 41248)
 
 ### Dependencies
 
@@ -38,14 +38,14 @@ This agent conducts thorough web-based research by:
 
 ```bash
 # From the project root
-npm run agents:web-research-agent
+npm run agents:web-research
 ```
 
 ### Testing with CLI
 
 ```bash
 # Connect to the web research agent
-npm run a2a:cli http://localhost:41244
+npm run a2a:cli http://localhost:41248
 
 # Example research request
 "Research the latest developments in renewable energy technology"

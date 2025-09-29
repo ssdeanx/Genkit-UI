@@ -12,6 +12,11 @@ import type {
   ResearchResult,
 } from '../../shared/interfaces.js';
 
+// Mock the logger
+vi.mock('../../logger.js', () => ({
+  log: vi.fn(),
+}));
+
 const makePlan = (topic = 'Sample Topic'): ResearchPlan => ({
   id: 'plan-1',
   topic,
@@ -136,7 +141,6 @@ describe('TaskDelegator', () => {
     // Wait until the active task transitions to 'failed'
     let active = delegator.getActiveTasks().find(e => e.stepId === 'cl1');
     for (let i = 0; i < 20 && active?.status !== 'failed'; i++) {
-      // eslint-disable-next-line no-await-in-loop
       await delay(0);
       active = delegator.getActiveTasks().find(e => e.stepId === 'cl1');
     }

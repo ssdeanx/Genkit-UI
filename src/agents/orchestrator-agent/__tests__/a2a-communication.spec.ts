@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { A2ACommunicationManager, MessageRouter } from '../a2a-communication.js';
 import type { TaskRequest, TaskResponse, AgentType, A2AMessage, ResearchStep } from '../../shared/interfaces.js';
 
+import type { A2AClient } from '@a2a-js/sdk/client';
+
+// Mock the logger
+vi.mock('../../logger.js', () => ({
+  flowlogger: vi.fn(),
+}));
+
 // Helper to create a minimal ResearchStep for TaskRequest.step
 const makeStep = (id = 'step-1'): ResearchStep => ({
   id,
@@ -129,8 +136,8 @@ describe('A2ACommunicationManager', () => {
     };
 
     // Create a fetch promise we can resolve later to keep it pending
-    let resolveFetch: (r: Response) => void;
-    const fetchPromise = new Promise<Response>(res => { resolveFetch = res; });
+    let resolveFetch;
+    const fetchPromise = new Promise<Response>((res) => { resolveFetch = (r: Response) => { const response = r; res(response); }; });
     globalThis.fetch = vi.fn().mockReturnValue(fetchPromise) as unknown as typeof globalThis.fetch;
 
     const sendPromise = manager.sendTask('web-research', taskRequest);
@@ -163,8 +170,8 @@ describe('A2ACommunicationManager', () => {
       step: makeStep('timeout'),
     };
 
-    let resolveFetch: (r: Response) => void;
-    const fetchPromise = new Promise<Response>(res => { resolveFetch = res; });
+    let resolveFetch;
+    const fetchPromise = new Promise<Response>((res) => { resolveFetch = (r: Response) => { const response = r; res(response); }; });
     globalThis.fetch = vi.fn().mockReturnValue(fetchPromise) as unknown as typeof globalThis.fetch;
 
     const sendPromise = manager.sendTask('web-research', taskRequest);
@@ -259,17 +266,17 @@ describe('A2ACommunicationManager', () => {
     // Mock the underlying sendTask to avoid network
     const spy = vi.spyOn(manager, 'sendTask').mockResolvedValue(r);
 
-    const events: any[] = [];
-    const { cancel, done } = await manager.sendTaskStream('web-research', t, (e) => events.push(e));
+    const events: unknown[] = [];
+    const { cancel, done } = await manager.sendTaskStream('web-research', t, e => events.push(e));
     await done; // fallback completes immediately after single request
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(events).toHaveLength(1);
-    expect(events[0].kind).toBe('message');
+    expect((events[0] as {kind: string}).kind).toBe('message');
     // The message parts should contain the serialized TaskResponse
-    const textPart = events[0].parts.find((p: any) => p.kind === 'text');
+    const textPart = (events[0] as {parts: unknown[]}).parts.find((p: unknown) => (p as {kind: string}).kind === 'text');
     expect(textPart).toBeTruthy();
-    expect(JSON.parse(textPart.text)).toMatchObject(r);
+    expect(JSON.parse((textPart as {text: string}).text)).toMatchObject(r);
     // Cancel in fallback path should succeed (noop)
     await expect(cancel()).resolves.toBe(true);
 
@@ -280,18 +287,18 @@ describe('A2ACommunicationManager', () => {
 
   it('sendTask uses A2AClient when enabled', async () => {
     // Capture client instances created by manager
-    const mockInstances: any[] = [];
+    const mockInstances: unknown[] = [];
 
     // Build a clientFactory to inject
     const sendMessage = vi.fn().mockResolvedValue({ ok: true, via: 'rpc' });
     const cancelTask = vi.fn().mockResolvedValue({});
     const sendMessageStream = vi.fn(async function* () {
-      yield { kind: 'message', role: 'agent', messageId: 'm', parts: [], taskId: 'x' } as any;
+      yield { kind: 'message', role: 'agent', messageId: 'm', parts: [], taskId: 'x' } as unknown;
     });
     const clientFactory = (url: string) => {
-      const inst = { sendMessage, cancelTask, sendMessageStream } as any;
+      const inst = { sendMessage, cancelTask, sendMessageStream, url } as unknown;
       mockInstances.push(inst);
-      return inst;
+      return inst as A2AClient;
     };
 
     const manager = new A2ACommunicationManager({ useA2AClient: true, clientFactory });
@@ -303,45 +310,45 @@ describe('A2ACommunicationManager', () => {
 
     // Ensure client was constructed and sendMessage used
     expect(mockInstances.length).toBeGreaterThan(0);
-    expect(mockInstances[0].sendMessage).toHaveBeenCalledTimes(1);
+    expect((mockInstances[0] as A2AClient).sendMessage).toHaveBeenCalledTimes(1);
   });
 
   it('sendTaskStream uses A2AClient streaming when enabled and cancel triggers client.cancelTask', async () => {
     // Defer the first stream yield so we can call cancel before completion
-    const mockInstances: any[] = [];
+    const mockInstances: unknown[] = [];
     // Initialize as a no-op so it's always callable (avoids TS 'never' error).
     let deferResolve: () => void = () => {};
 
     const sendMessage = vi.fn().mockResolvedValue({ ok: true, via: 'rpc' });
     const cancelTask = vi.fn().mockResolvedValue({});
-    const sendMessageStream = vi.fn(({ message }: any) => {
+    const sendMessageStream = vi.fn(({ message }: {message: unknown}) => {
       const defer = new Promise<void>(res => { deferResolve = () => res(); });
       async function* gen() {
         // wait until test triggers
         await defer;
-        yield { kind: 'status-update', taskId: message.taskId, status: { state: 'working' }, final: false } as any;
-        yield { kind: 'message', role: 'agent', messageId: 'm', parts: [], taskId: message.taskId } as any;
+        yield { kind: 'status-update', taskId: (message as {taskId: string}).taskId, status: { state: 'working' }, final: false } as unknown;
+        yield { kind: 'message', role: 'agent', messageId: 'm', parts: [], taskId: (message as {taskId: string}).taskId } as unknown;
       }
-      const it = gen();
-      return it as any;
+      const iterator = gen();
+      return iterator as unknown;
     });
     const clientFactory = (_url: string) => {
-      const inst = { sendMessage, cancelTask, sendMessageStream } as any;
+      const inst = { sendMessage, cancelTask, sendMessageStream, _url } as unknown;
       mockInstances.push(inst);
-      return inst;
+      return inst as A2AClient;
     };
 
     const manager = new A2ACommunicationManager({ useA2AClient: true, useStreaming: true, clientFactory });
 
     const t: TaskRequest = { taskId: 'rpc-stream-1', type: 'web-search', parameters: {}, priority: 1, timeout: 1000, metadata: {}, step: makeStep('rpc-stream-1') };
-    const events: any[] = [];
+    const events: unknown[] = [];
     const { cancel, done } = await manager.sendTaskStream('web-research', t, e => events.push(e));
 
     // Cancel before allowing stream to emit
     const cancelResult = await cancel();
     expect(cancelResult).toBe(true);
     expect(mockInstances.length).toBeGreaterThan(0);
-    expect(mockInstances[0].cancelTask).toHaveBeenCalledWith({ taskId: 'rpc-stream-1' });
+    expect((mockInstances[0] as A2AClient).cancelTask).toHaveBeenCalledWith({ taskId: 'rpc-stream-1' });
 
     // Now allow the generator to proceed and complete cleanup
     deferResolve();
@@ -382,7 +389,7 @@ describe('MessageRouter', () => {
   it('throws on unknown message type and on unimplemented task-response', async () => {
     const router = new MessageRouter({} as unknown as A2ACommunicationManager);
 
-    const badType: A2AMessage = { id: 'u1', from: 'x', to: 'y', type: 'unknown' as any, payload: {}, timestamp: new Date() };
+    const badType: A2AMessage = { id: 'u1', from: 'x', to: 'y', type: 'invalid' as unknown as A2AMessage['type'], payload: {}, timestamp: new Date() };
     await expect(router.routeMessage(badType)).rejects.toThrow('Unknown message type');
 
     const unimpl: A2AMessage = { id: 'u2', from: 'x', to: 'y', type: 'task-response', payload: {}, timestamp: new Date() };
@@ -390,7 +397,7 @@ describe('MessageRouter', () => {
   });
 
   it('determines agent type from task type in task-request', async () => {
-    const captured: Array<AgentType> = [];
+    const captured: AgentType[] = [];
     const fakeManager = {
       sendTask: vi.fn(async (agentType: AgentType) => {
         captured.push(agentType);

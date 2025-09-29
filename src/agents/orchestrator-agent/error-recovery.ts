@@ -1,5 +1,5 @@
 import type { OrchestrationState, OrchestrationIssue, ResearchStepExecution, ResearchStep } from '../shared/interfaces.js';
-import { log } from './logger.js';
+import { log } from '../../logger.js';
 import type { TaskDelegator } from './task-delegator.js';
 
 /**
@@ -40,7 +40,7 @@ export class ErrorRecovery {
     issue?: OrchestrationIssue;
   }> {
     const failureType = this.classifyFailure(error);
-    const retryCount = this.retryAttempts.get(stepId) ?? 0;
+    const retryCount = execution.retryCount;
 
     // Check if we've exceeded maximum retries
     if (retryCount >= this.getMaxRetries(failureType)) {
@@ -108,15 +108,14 @@ export class ErrorRecovery {
    * Get maximum retry attempts for a failure type
    */
   private getMaxRetries(failureType: string): number {
-    const retryLimits = {
-      'temporary': 3,
-      'rate-limit': 5,
-      'agent-unavailable': 2,
-      'data-quality': 1,
-      'critical': 0
-    };
-
-    return retryLimits[failureType as keyof typeof retryLimits] || 1;
+    switch (failureType) {
+      case 'temporary': return 3;
+      case 'rate-limit': return 5;
+      case 'agent-unavailable': return 2;
+      case 'data-quality': return 1;
+      case 'critical': return 0;
+      default: return 1;
+    }
   }
 
   /**
@@ -297,7 +296,8 @@ export class ErrorRecovery {
     // Check if this affects other steps
     const dependentSteps = this.findDependentSteps(stepId, orchestrationState);
 
-    const severity = dependentSteps.length > 0 ? 'high' : 'medium';
+    // Critical failures are always high severity
+    const severity: 'low' | 'medium' | 'high' = 'high';
 
     const errMsg = error instanceof Error ? error.message : String(error);
     return {
@@ -325,6 +325,9 @@ export class ErrorRecovery {
     const strategies = step?.fallbackStrategies ?? [];
     const hasFallback = strategies.length > 0;
 
+    // Check impact on overall research first
+    const dependentSteps = this.findDependentSteps(stepId, orchestrationState);
+
     if (hasFallback && failureType !== 'critical') {
       // Try fallback strategy
       return {
@@ -335,8 +338,17 @@ export class ErrorRecovery {
       };
     }
 
-    // Check impact on overall research
-    const dependentSteps = this.findDependentSteps(stepId, orchestrationState);
+    // For critical failures, always escalate
+    if (failureType === 'critical') {
+      return {
+        recoveryAction: 'escalate',
+        issue: this.createIssue(stepId, 'agent-failure', 'high',
+          `Critical failure in step ${stepId} cannot be recovered`,
+          `Manual intervention required for critical system failure`,
+          dependentSteps)
+      };
+    }
+
     const isCriticalPath = this.isCriticalPath(stepId, orchestrationState);
 
     if (isCriticalPath || dependentSteps.length > 5) {

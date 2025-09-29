@@ -1,7 +1,7 @@
 import type { A2AMessage, TaskRequest, TaskResponse, AgentType } from '../shared/interfaces.js';
 import { A2AClient } from '@a2a-js/sdk/client';
 import type { Message, Task, TaskStatusUpdateEvent, TaskArtifactUpdateEvent } from '@a2a-js/sdk';
-import { log } from './logger.js';
+import { flowlogger } from '../../logger.js';
 
 /**
  * A2A Communication Manager for orchestrating inter-agent messaging
@@ -221,7 +221,7 @@ export class A2ACommunicationManager {
           }
         }
       } catch (err) {
-        log('error', `Streaming error for task ${taskRequest.taskId}:`, err);
+        flowlogger.error(`Streaming error for task ${taskRequest.taskId}:`, err);
       } finally {
         cleanup();
       }
@@ -236,7 +236,7 @@ export class A2ACommunicationManager {
         cleanup();
         return true;
       } catch (err) {
-        log('warn', `Cancel failed for task ${taskRequest.taskId}:`, err);
+        flowlogger.warn(`Cancel failed for task ${taskRequest.taskId}:`, err);
         return false;
       }
     };
@@ -256,7 +256,7 @@ export class A2ACommunicationManager {
       return await Promise.all(promises);
     } catch (error) {
       // Log partial failures but continue with successful responses
-      log('error', 'Some parallel tasks failed:', error);
+      flowlogger.error('Some parallel tasks failed:', error);
       throw error;
     }
   }
@@ -312,7 +312,7 @@ export class A2ACommunicationManager {
    * Handle task timeout
    */
   private handleTaskTimeout(taskId: string): void {
-    log('warn', `Task ${taskId} timed out`);
+    flowlogger.warn(`Task ${taskId} timed out`);
     this.pendingTasks.delete(taskId);
     this.taskTimeouts.delete(taskId);
 
@@ -381,13 +381,13 @@ export class MessageRouter {
 
   private async handleStatusUpdate(message: A2AMessage): Promise<void> {
     // Handle status updates from agents
-    log('log', `Status update from ${message.from}:`, message.payload);
+    flowlogger.info(`Status update from ${message.from}:`, message.payload);
     // In a real implementation, this would update orchestration state
   }
 
   private async handleError(message: A2AMessage): Promise<void> {
     // Handle error messages from agents
-    log('error', `Error from ${message.from}:`, message.payload);
+    flowlogger.error(`Error from ${message.from}:`, message.payload);
     // In a real implementation, this would trigger error recovery
   }
 
@@ -395,12 +395,12 @@ export class MessageRouter {
     // Validate payload shape at runtime since message.payload is typed as unknown
     const {payload} = message;
     if (typeof payload !== 'object' || payload === null) {
-      log('warn', `Cancel message from ${message.from} has invalid payload:`, payload);
+      flowlogger.warn(`Cancel message from ${message.from} has invalid payload:`, payload);
       return false;
     }
     const maybe = payload as { taskId?: unknown };
     if (typeof maybe.taskId !== 'string') {
-      log('warn', `Cancel message from ${message.from} missing valid taskId:`, payload);
+      flowlogger.warn(`Cancel message from ${message.from} missing valid taskId:`, payload);
       return false;
     }
 

@@ -1,19 +1,18 @@
 # Genkit Multi-Agent System
 
 <!-- Primary tech -->
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9.2-blue?logo=typescript)](https://www.typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-^5.9.2-blue?logo=typescript)](https://www.typescriptlang.org)
 [![Node](https://img.shields.io/badge/Node-%3E%3D18-brightgreen?logo=node.js)](https://nodejs.org)
 [![Google Gemini](https://img.shields.io/badge/Google%20Gemini-API-blue?logo=google)](https://developers.generativeai.google)
 [![A2A](https://img.shields.io/badge/A2A-^0.3.4-yellowgreen?logo=npm)](https://www.npmjs.com/package/@a2a-js/sdk)
 [![Express](https://img.shields.io/badge/Express-^4.21.2-lightgrey?logo=express)](https://expressjs.com)
-[![Genkit](https://img.shields.io/badge/Genkit-^1.19.3-orange)](https://github.com/genkit-ai)
+[![Genkit](https://img.shields.io/badge/Genkit-^1.20.0-orange)](https://github.com/genkit-ai)
 <!-- Genkit ecosystem packages -->
 [![@genkit-ai/core](https://img.shields.io/npm/v/@genkit-ai%2Fcore?label=@genkit-ai%2Fcore&logo=npm)](https://www.npmjs.com/package/@genkit-ai/core)
 [![@genkit-ai/google-genai](https://img.shields.io/npm/v/@genkit-ai%2Fgoogle-genai?label=@genkit-ai%2Fgoogle-genai&logo=npm)](https://www.npmjs.com/package/@genkit-ai/google-genai)
 [![@genkit-ai/express](https://img.shields.io/npm/v/@genkit-ai%2Fexpress?label=@genkit-ai%2Fexpress&logo=npm)](https://www.npmjs.com/package/@genkit-ai/express)
 [![@genkit-ai/mcp](https://img.shields.io/npm/v/@genkit-ai%2Fmcp?label=@genkit-ai%2Fmcp&logo=npm)](https://www.npmjs.com/package/@genkit-ai/mcp)
 <!-- Runtime & integrations -->
-[![prisma](https://img.shields.io/npm/v/prisma?label=prisma&logo=npm)](https://www.npmjs.com/package/prisma)
 [![firebase](https://img.shields.io/npm/v/firebase?label=firebase&logo=npm)](https://www.npmjs.com/package/firebase)
 [![serpapi](https://img.shields.io/npm/v/serpapi?label=serpapi&logo=npm)](https://www.npmjs.com/package/serpapi)
 [![wikipedia](https://img.shields.io/npm/v/wikipedia?label=wikipedia&logo=npm)](https://www.npmjs.com/package/wikipedia)
@@ -22,7 +21,7 @@
 [![tsx](https://img.shields.io/npm/v/tsx?label=tsx&logo=npm)](https://www.npmjs.com/package/tsx)
 [![vitest](https://img.shields.io/npm/v/vitest?label=vitest&logo=npm)](https://www.npmjs.com/package/vitest)
 [![prettier](https://img.shields.io/npm/v/prettier?label=prettier&logo=npm)](https://www.npmjs.com/package/prettier)
-[![pino-pretty]
+[![pino-pretty](https://img.shields.io/npm/v/pino-pretty?label=pino-pretty&logo=npm)](https://www.npmjs.com/package/pino-pretty)
 
 A production-oriented, TypeScript multi-agent AI platform built on Google Genkit. The system composes Genkit flows, reusable tools, and independent A2A agents to support complex tasks such as research orchestration, code generation, and content editing.
 
@@ -151,10 +150,14 @@ npm run a2a:cli http://localhost:41243
 Run a single agent (examples):
 
 ```bash
-npm run agents:orchestrator-agent   # starts orchestrator on port 41243
-npm run agents:planning             # starts planning agent on port 41245
-npm run agents:coder                # starts coder agent on port 41241
-npm run agents:content-editor       # starts content editor agent (default port 10003)
+npm run agents:orchestrator   # starts orchestrator on port 41243
+npm run agents:planning       # starts planning agent on port 41244
+npm run agents:coder          # starts coder agent on port 41242
+npm run agents:content-editor # starts content editor agent (default port 10003)
+npm run agents:academic       # starts academic research agent on port 41245
+npm run agents:news           # starts news research agent on port 41246
+npm run agents:data-analysis  # starts data analysis agent on port 41247
+npm run agents:web-research   # starts web research agent on port 41248
 ```
 
 ## Deployment to Firebase

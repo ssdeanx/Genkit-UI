@@ -22,7 +22,7 @@ The Planning Agent specializes in research methodology and strategic planning, p
   "protocolVersion": "1.0",
   "name": "Planning Agent",
   "description": "An agent that creates comprehensive, evidence-based research strategies with systematic planning, risk assessment, and execution blueprints.",
-  "url": "http://localhost:41245/",
+  "url": "http://localhost:41244/",
   "capabilities": {
     "streaming": true,
     "pushNotifications": false,
@@ -54,7 +54,7 @@ npx tsx src/agents/planning-agent/index.ts
 ### Environment Variables
 
 - `GEMINI_API_KEY`: Required for AI model access
-- `PLANNING_AGENT_PORT`: Override default port (41245)
+- `PLANNING_AGENT_PORT`: Override default port (41244)
 
 ### Testing with CLI
 
@@ -63,7 +63,7 @@ npx tsx src/agents/planning-agent/index.ts
 npm run agents:planning
 
 # Test in another terminal
-npm run a2a:cli http://localhost:41245
+npm run a2a:cli http://localhost:41244
 ```
 
 ### Example Queries
@@ -158,7 +158,7 @@ src/agents/planning-agent/
 ├── index.ts              # Server setup and agent executor
 ├── genkit.ts             # AI model configuration
 ├── planning_agent.prompt # Research planning framework
-└── README.md             # This documentation
+└── AGENTS.md             # This documentation
 ```
 
 ### Dependencies

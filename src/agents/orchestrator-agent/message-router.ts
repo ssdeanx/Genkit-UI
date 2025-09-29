@@ -281,6 +281,19 @@ export class MessageRouter {
       }
     }
 
+    // For cancel messages, route to the specific agent
+    if (message.type === 'cancel') {
+      const targetAgent = Array.from(this.agentRegistry.values())
+        .find(agent => agent.type === message.to && agent.status === 'active');
+      if (targetAgent) {
+        targets.push({
+          agentId: targetAgent.id,
+          priority: 1,
+          timeout: 30000
+        });
+      }
+    }
+
     // For other messages, route to orchestrator agents
     if ((targets?.length ?? 0) === 0) {
       const orchestrators = Array.from(this.agentRegistry.values())
@@ -359,6 +372,10 @@ export class MessageRouter {
    */
   private bootstrapRegistryFromEndpoints(): void {
     const endpoints = this.a2aManager.getAgentEndpoints();
+    if (!endpoints || typeof endpoints !== 'object') {
+      return; // Skip if no endpoints available
+    }
+    
     const executions: ResearchStepExecution[] = this.taskDelegator.getActiveTasks();
     (Object.keys(endpoints) as Array<keyof typeof endpoints>).forEach((k) => {
       const type = k as unknown as AgentType;

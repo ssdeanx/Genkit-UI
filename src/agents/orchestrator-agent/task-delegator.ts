@@ -11,7 +11,7 @@ import type {
   ResearchResult
 } from '../shared/interfaces.js';
 import type { A2ACommunicationManager } from './a2a-communication.js';
-import { log } from './logger.js';
+import { log } from '../../logger.js';
 
 /**
  * Task Delegation System for the Orchestrator Agent

@@ -28,7 +28,7 @@ import type {
 import { TaskDelegator } from "./task-delegator.js";
 import { A2ACommunicationManager } from "./a2a-communication.js";
 import { ErrorRecovery } from "./error-recovery.js";
-import { log } from './logger.js';
+import { flowlogger } from '../../logger.js';
 
 /* use centralized logger */
 
@@ -37,10 +37,10 @@ function isTestEnvironment(): boolean {
 }
 if (process.env.GEMINI_API_KEY === undefined || process.env.GEMINI_API_KEY === '') {
   if (isTestEnvironment()) {
-    log('warn', 'GEMINI_API_KEY not set; continuing in test environment.');
+    flowlogger.warn('GEMINI_API_KEY not set; continuing in test environment.');
     // Early return: do not exit in test environment
   } else {
-    log('error', "GEMINI_API_KEY environment variable not set.");
+    flowlogger.error("GEMINI_API_KEY environment variable not set.");
     process.exit(1);
   }
 }
@@ -64,7 +64,25 @@ class OrchestratorAgentExecutor implements AgentExecutor {
     this.errorRecovery = new ErrorRecovery(taskDelegator);
   }
 
-
+  // Helper to stringify unknown errors for logger calls (prevents TS errors when passing unknown)
+  private formatError(error: unknown): string {
+    if (error instanceof Error) {
+      // Safely handle possibly-null/undefined or empty message/stack fields
+      const message = typeof error.message === 'string' && error.message.length > 0 ? error.message : '';
+      const stack =
+        typeof error.stack === 'string' && error.stack.length > 0 ? '\n' + error.stack : '';
+      // If both are empty, fallback to a generic description
+      if (message === '' && stack === '') {
+        return 'Error';
+      }
+      return `${message}${stack}`;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
 
   public cancelTask = async (
     taskId: string,
@@ -115,7 +133,7 @@ class OrchestratorAgentExecutor implements AgentExecutor {
     const contextId = userMessage.contextId ?? existingTask?.contextId ?? uuidv4();
     const researchId = taskId;
 
-    log('log',
+    flowlogger.info(
       `Processing message ${userMessage.messageId} for task ${taskId} (context: ${contextId})`
     );
 
@@ -181,7 +199,7 @@ class OrchestratorAgentExecutor implements AgentExecutor {
       .filter((m) => m.content.length > 0);
 
     if (messages.length === 0) {
-      log('warn',
+      flowlogger.warn(
         `No valid text messages found in history for task ${taskId}.`
       );
       const failureUpdate: TaskStatusUpdateEvent = {
@@ -290,7 +308,7 @@ class OrchestratorAgentExecutor implements AgentExecutor {
 
       // Check if cancelled
       if (this.cancelledTasks.has(taskId)) {
-        log('log', `Request cancelled for task: ${taskId}`);
+        flowlogger.warn(`Request cancelled for task: ${taskId}`);
         const cancelledUpdate: TaskStatusUpdateEvent = {
           kind: 'status-update',
           taskId,
@@ -506,7 +524,7 @@ class OrchestratorAgentExecutor implements AgentExecutor {
       await this.taskStore.save(completedTask);
 
     } catch (error) {
-      log('error', `Error processing task ${taskId}:`, error);
+      flowlogger.error(`Error processing task ${taskId}: ${this.formatError(error)}`);
 
       // Classify the error for better reporting
       const failureType = this.errorRecovery['classifyFailure'](error);
@@ -540,9 +558,9 @@ class OrchestratorAgentExecutor implements AgentExecutor {
     try {
       taskMetadata.orchestrationState = JSON.stringify(researchState);
       taskMetadata.lastOrchestrationUpdate = new Date().toISOString();
-      log('log', `Persisted orchestration state in metadata`);
+      flowlogger.info(`Persisted orchestration state in metadata`);
     } catch (error) {
-      log('warn', `Failed to persist orchestration state:`, error);
+      flowlogger.warn(`Failed to persist orchestration state: ${this.formatError(error)}`);
     }
   }
 
@@ -571,11 +589,11 @@ class OrchestratorAgentExecutor implements AgentExecutor {
           }
         }
 
-        log('log', `Loaded orchestration state from metadata`);
+        flowlogger.info(`Loaded orchestration state from metadata`);
         return parsed as unknown as OrchestrationState;
       }
     } catch (error) {
-      log('warn', `Failed to load orchestration state from metadata:`, error);
+      flowlogger.warn(`Failed to load orchestration state from metadata: ${this.formatError(error)}`);
     }
     return null;
   }
@@ -607,9 +625,9 @@ class OrchestratorAgentExecutor implements AgentExecutor {
           eventBus.publish(artifactUpdate);
         }
 
-        log('log', `Published ${artifacts.length} artifacts from step ${stepResult.stepId}`);
+        flowlogger.info(`Published ${artifacts.length} artifacts from step ${stepResult.stepId}`);
       } catch (error) {
-        log('warn', `Failed to aggregate artifacts from step ${stepResult.stepId}:`, error);
+        flowlogger.warn(`Failed to aggregate artifacts from step ${stepResult.stepId}: ${this.formatError(error)}`);
       }
     }
   }
@@ -682,7 +700,7 @@ class OrchestratorAgentExecutor implements AgentExecutor {
       }
 
     } catch (error) {
-      log('warn', `Error extracting artifacts from step result ${stepResult.stepId}:`, error);
+      flowlogger.warn(`Error extracting artifacts from step result ${stepResult.stepId}: ${this.formatError(error)}`);
     }
 
     return artifacts;
@@ -695,27 +713,24 @@ class OrchestratorAgentExecutor implements AgentExecutor {
       return parsed.orchestrationDecision ?? (parsed as unknown as OrchestrationDecision);
     } catch (error) {
       // Fallback: create a basic decision structure
-      log('warn', 'Could not parse orchestration decision as JSON, using fallback', error);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      flowlogger.warn(`Could not parse orchestration decision as JSON, using fallback. Error: ${errMsg}`);
       return {
         researchId: '',
         timestamp: new Date().toISOString(),
         currentPhase: 'execution',
-        activeTasks: [],
-        completedTasks: [],
-        issues: [],
+        // Ensure required properties are present and well-typed
+        nextActions: [] as OrchestrationDecision['nextActions'],
+        activeTasks: [] as OrchestrationDecision['activeTasks'],
+        completedTasks: [] as OrchestrationDecision['completedTasks'],
+        issues: [] as OrchestrationDecision['issues'],
         progressMetrics: {
           completedSteps: 0,
-          totalSteps: 1,
-          estimatedTimeRemaining: 30,
+          totalSteps: 0,
+          estimatedTimeRemaining: 0,
           overallConfidence: 0.5,
-          qualityScore: 0.8,
+          qualityScore: 0, // <-- added required field
         },
-        nextActions: [{
-          action: 'monitor-progress',
-          description: 'Continue monitoring research progress',
-          priority: 3,
-          estimatedImpact: 'Maintain research momentum',
-        }],
       } as OrchestrationDecision;
     }
   }
@@ -855,15 +870,15 @@ async function main() {
   // 7. Start the server
   const PORT = process.env.ORCHESTRATOR_AGENT_PORT ?? 41243;
   expressApp.listen(PORT, () => {
-    log('log', `Server started on http://localhost:${PORT}`);
-    log('log', `Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
-    log('log', 'Press Ctrl+C to stop the server');
+    flowlogger.info(`Server started on http://localhost:${PORT}`);
+    flowlogger.info(`Agent Card: http://localhost:${PORT}/.well-known/agent-card.json`);
+    flowlogger.info('Press Ctrl+C to stop the server');
   });
 }
 
 if (process.env.NODE_ENV !== 'test') {
   main().catch((error) => {
-    log('error', 'Failed to start server:', error);
+    flowlogger.error('Failed to start server:', error);
   });
 }
 

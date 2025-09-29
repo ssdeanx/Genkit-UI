@@ -1,5 +1,5 @@
 import type { ResearchStepResult, OrchestrationState, SynthesisResult } from '../shared/interfaces.js';
-import { log } from './logger.js';
+import { flowlogger } from '../../logger.js';
 
 /**
  * Synthesis Engine for the Orchestrator Agent
@@ -54,7 +54,7 @@ export class SynthesisEngine {
       };
 
     } catch (error) {
-      log('error', 'Synthesis failed:', error);
+      flowlogger.error('Synthesis failed:', error);
       throw new Error(`Synthesis engine failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

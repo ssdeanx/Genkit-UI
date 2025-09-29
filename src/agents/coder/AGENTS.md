@@ -7,4 +7,4 @@ export GEMINI_API_KEY=<your_api_key>
 npm run agents:coder
 ```
 
-This will start up the agent on `http://localhost:41241/`.
+This will start up the agent on `http://localhost:41242/`.

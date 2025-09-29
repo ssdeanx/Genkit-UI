@@ -4,7 +4,7 @@ import { InMemoryTaskStore, type TaskStore, type AgentExecutor, DefaultRequestHa
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
 import * as dotenv from "dotenv";
 import { flowlogger } from "./../../logger.js";
-import { ContentEditorAgentExecutor } from "./executor.js";
+import { ContentEditorExecutor } from "./executor.js";
 
 dotenv.config();
 
@@ -93,7 +93,7 @@ const contentEditorAgentCard: AgentCard = {
 
 async function main() {
   const taskStore: TaskStore = new InMemoryTaskStore();
-  const agentExecutor: AgentExecutor = new ContentEditorAgentExecutor();
+  const agentExecutor: AgentExecutor = new ContentEditorExecutor();
   const requestHandler = new DefaultRequestHandler(
     contentEditorAgentCard,
     taskStore,
