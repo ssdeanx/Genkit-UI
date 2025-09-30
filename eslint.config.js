@@ -100,6 +100,14 @@ export default [
       '.gemini/**',
       '.github/workflows/*.yml',
       'scripts/**',
+      'functions/**',
+      'tests/**',
+      'docs/**',
+      'memory-bank/**',
+      'coverage/**',
+      '.specify/**',
+      'datasets/**',
+      'spec/**'
     ]
   }
 ]

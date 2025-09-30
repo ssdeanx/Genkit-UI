@@ -3,6 +3,7 @@
 ## In Progress
 
 - [TASK008](./TASK008-complete-a2a-implementation.md) Complete A2A implementation — Paused at end of session.
+- [TASK010](./TASK010-achieve-100-percent-agent-coverage.md) Achieve 100% test coverage for all agents — Working towards 100% coverage
 
 ## Pending
 

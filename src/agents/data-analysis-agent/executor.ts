@@ -54,8 +54,6 @@ type Findings = {
   };
 } & Record<string, unknown>;
 
-const dataAnalysisPrompt = ai.prompt('data_analysis');
-
 export class DataAnalysisAgentExecutor implements AgentExecutor {
   private cancelledTasks = new Set<string>();
 
@@ -160,6 +158,7 @@ export class DataAnalysisAgentExecutor implements AgentExecutor {
     }
 
     try {
+      const dataAnalysisPrompt = ai.prompt('data_analysis');
       const response = await dataAnalysisPrompt(
         {
           analysisType: 'comprehensive statistical analysis with visualization',

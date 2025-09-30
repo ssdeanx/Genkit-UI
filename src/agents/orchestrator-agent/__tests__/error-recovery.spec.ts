@@ -364,4 +364,438 @@ describe('ErrorRecovery', () => {
       expect(typeof stats.successRate).toBe('number');
     });
   });
+
+  describe('handleAgentUnavailableFailure - alternative agent success path', () => {
+    it('successfully delegates to alternative agent when available', async () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 0,
+        progressUpdates: [],
+      };
+
+      const mockDelegateSteps = vi.fn().mockResolvedValue([
+        {
+          stepId: 'step1',
+          agentId: 'academic-research',
+          status: 'completed',
+          startedAt: new Date(),
+          completedAt: new Date(),
+          progressUpdates: [],
+          result: { data: 'success' },
+        },
+      ]);
+
+      const delegatorWithMock = {
+        getActiveTasks: vi.fn().mockReturnValue([]),
+        delegateResearchSteps: mockDelegateSteps,
+      } as unknown as TaskDelegator;
+
+      const recovery = new ErrorRecovery(delegatorWithMock);
+
+      const orchestrationState: OrchestrationState = {
+        researchId: 'research1',
+        plan: createResearchPlan({
+          executionSteps: [
+            createResearchStep({ id: 'step1', agentType: 'web-research' }),
+            createResearchStep({ id: 'step2', agentType: 'academic-research' }),
+          ],
+        }),
+        currentPhase: 'execution',
+        activeSteps: [],
+        completedSteps: [],
+        issues: [],
+        progress: { completedSteps: 0, totalSteps: 2, estimatedTimeRemaining: 10, overallConfidence: 0.8 },
+        startedAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      const result = await recovery['handleAgentUnavailableFailure']('step1', mockExecution, orchestrationState);
+
+      expect(result.recoveryAction).toBe('fallback');
+      expect(result.newExecution).toBeDefined();
+      expect(result.newExecution?.agentId).toBe('academic-research');
+      expect(result.newExecution?.result).toEqual({ data: 'success' });
+      expect(mockDelegateSteps).toHaveBeenCalled();
+    });
+
+    it('escalates when alternative agent delegation fails', async () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 0,
+        progressUpdates: [],
+      };
+
+      const mockDelegateSteps = vi.fn().mockRejectedValue(new Error('Delegation failed'));
+
+      const delegatorWithMock = {
+        getActiveTasks: vi.fn().mockReturnValue([]),
+        delegateResearchSteps: mockDelegateSteps,
+      } as unknown as TaskDelegator;
+
+      const recovery = new ErrorRecovery(delegatorWithMock);
+
+      const orchestrationState: OrchestrationState = {
+        researchId: 'research1',
+        plan: createResearchPlan({
+          executionSteps: [
+            createResearchStep({ id: 'step1', agentType: 'web-research' }),
+            createResearchStep({ id: 'step2', agentType: 'academic-research' }),
+          ],
+        }),
+        currentPhase: 'execution',
+        activeSteps: [],
+        completedSteps: [],
+        issues: [],
+        progress: { completedSteps: 0, totalSteps: 2, estimatedTimeRemaining: 10, overallConfidence: 0.8 },
+        startedAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      const result = await recovery['handleAgentUnavailableFailure']('step1', mockExecution, orchestrationState);
+
+      expect(result.recoveryAction).toBe('escalate');
+      expect(result.issue).toBeDefined();
+      expect(result.issue?.severity).toBe('high');
+      expect(result.issue?.description).toContain('both unavailable');
+    });
+  });
+
+  describe('handleDataQualityFailure - retry with different parameters', () => {
+    it('retries with different parameters when step supports it', () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 0,
+        progressUpdates: [],
+      };
+
+      const orchestrationState: OrchestrationState = {
+        researchId: 'research1',
+        plan: createResearchPlan({
+          executionSteps: [createResearchStep({ id: 'step1', description: 'Search for information' })],
+        }),
+        currentPhase: 'execution',
+        activeSteps: [],
+        completedSteps: [],
+        issues: [],
+        progress: { completedSteps: 0, totalSteps: 1, estimatedTimeRemaining: 10, overallConfidence: 0.8 },
+        startedAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      const result = errorRecovery['handleDataQualityFailure']('step1', mockExecution, orchestrationState);
+
+      expect(result.recoveryAction).toBe('retry');
+      expect(result.newExecution?.status).toBe('pending');
+      expect(result.newExecution?.retryCount).toBe(1);
+    });
+
+    it('escalates when step cannot retry with different parameters', () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 0,
+        progressUpdates: [],
+      };
+
+      const orchestrationState: OrchestrationState = {
+        researchId: 'research1',
+        plan: createResearchPlan({
+          executionSteps: [createResearchStep({ id: 'step1', description: 'Process data' })],
+        }),
+        currentPhase: 'execution',
+        activeSteps: [],
+        completedSteps: [],
+        issues: [],
+        progress: { completedSteps: 0, totalSteps: 1, estimatedTimeRemaining: 10, overallConfidence: 0.8 },
+        startedAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      const result = errorRecovery['handleDataQualityFailure']('step1', mockExecution, orchestrationState);
+
+      expect(result.recoveryAction).toBe('escalate');
+      expect(result.issue).toBeDefined();
+      expect(result.issue?.type).toBe('data-quality');
+    });
+  });
+
+  describe('handleCriticalFailure - with dependent steps', () => {
+    it('escalates critical failure with dependent step count', async () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 0,
+        progressUpdates: [],
+      };
+
+      const orchestrationState: OrchestrationState = {
+        researchId: 'research1',
+        plan: createResearchPlan({
+          executionSteps: [
+            createResearchStep({ id: 'step1', dependencies: [] }),
+            createResearchStep({ id: 'step2', dependencies: ['step1'] }),
+            createResearchStep({ id: 'step3', dependencies: ['step1'] }),
+            createResearchStep({ id: 'step4', dependencies: ['step1'] }),
+          ],
+        }),
+        currentPhase: 'execution',
+        activeSteps: [],
+        completedSteps: [],
+        issues: [],
+        progress: { completedSteps: 0, totalSteps: 4, estimatedTimeRemaining: 10, overallConfidence: 0.8 },
+        startedAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      const criticalError = new Error('Authentication failed');
+      const result = await errorRecovery['handleCriticalFailure']('step1', mockExecution, criticalError, orchestrationState);
+
+      expect(result.recoveryAction).toBe('escalate');
+      expect(result.issue).toBeDefined();
+      expect(result.issue?.severity).toBe('high');
+      expect(result.issue?.description).toContain('Critical failure in step step1');
+      expect(result.issue?.description).toContain('Authentication failed');
+      expect(result.issue?.affectedSteps).toContain('step2');
+      expect(result.issue?.affectedSteps).toContain('step3');
+      expect(result.issue?.affectedSteps).toContain('step4');
+    });
+  });
+
+  describe('handleExhaustedRetries - fallback strategies', () => {
+    it('attempts fallback when strategies are available', async () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 3,
+        progressUpdates: [],
+      };
+
+      const orchestrationState: OrchestrationState = {
+        researchId: 'research1',
+        plan: createResearchPlan({
+          executionSteps: [
+            createResearchStep({
+              id: 'step1',
+              fallbackStrategies: ['use-cached-data', 'skip-validation'],
+            }),
+          ],
+        }),
+        currentPhase: 'execution',
+        activeSteps: [],
+        completedSteps: [],
+        issues: [],
+        progress: { completedSteps: 0, totalSteps: 1, estimatedTimeRemaining: 10, overallConfidence: 0.8 },
+        startedAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      const result = await errorRecovery['handleExhaustedRetries']('step1', mockExecution, 'temporary', orchestrationState);
+
+      expect(result.recoveryAction).toBe('fallback');
+      expect(result.issue).toBeDefined();
+      expect(result.issue?.description).toContain('attempting fallback');
+      expect(result.issue?.resolution).toContain('use-cached-data');
+    });
+
+    it('escalates critical failures even with fallback strategies', async () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 3,
+        progressUpdates: [],
+      };
+
+      const orchestrationState: OrchestrationState = {
+        researchId: 'research1',
+        plan: createResearchPlan({
+          executionSteps: [
+            createResearchStep({
+              id: 'step1',
+              fallbackStrategies: ['use-cached-data'],
+            }),
+          ],
+        }),
+        currentPhase: 'execution',
+        activeSteps: [],
+        completedSteps: [],
+        issues: [],
+        progress: { completedSteps: 0, totalSteps: 1, estimatedTimeRemaining: 10, overallConfidence: 0.8 },
+        startedAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      const result = await errorRecovery['handleExhaustedRetries']('step1', mockExecution, 'critical', orchestrationState);
+
+      expect(result.recoveryAction).toBe('escalate');
+      expect(result.issue).toBeDefined();
+      expect(result.issue?.severity).toBe('high');
+      expect(result.issue?.description).toContain('cannot be recovered');
+    });
+
+    it('escalates when critical path step fails', async () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 3,
+        progressUpdates: [],
+      };
+
+      const orchestrationState: OrchestrationState = {
+        researchId: 'research1',
+        plan: createResearchPlan({
+          executionSteps: [
+            createResearchStep({ id: 'step1', priority: 5, dependencies: [] }),
+            createResearchStep({ id: 'step2', dependencies: ['step1'] }),
+            createResearchStep({ id: 'step3', dependencies: ['step1'] }),
+            createResearchStep({ id: 'step4', dependencies: ['step1'] }),
+            createResearchStep({ id: 'step5', dependencies: ['step1'] }),
+            createResearchStep({ id: 'step6', dependencies: ['step1'] }),
+          ],
+        }),
+        currentPhase: 'execution',
+        activeSteps: [],
+        completedSteps: [],
+        issues: [],
+        progress: { completedSteps: 0, totalSteps: 6, estimatedTimeRemaining: 10, overallConfidence: 0.8 },
+        startedAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      const result = await errorRecovery['handleExhaustedRetries']('step1', mockExecution, 'temporary', orchestrationState);
+
+      expect(result.recoveryAction).toBe('escalate');
+      expect(result.issue).toBeDefined();
+      expect(result.issue?.severity).toBe('critical');
+      expect(result.issue?.description).toContain('failed permanently');
+      expect(result.issue?.resolution).toContain('5 dependent steps');
+    });
+
+    it('aborts non-critical steps with no fallback', async () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 3,
+        progressUpdates: [],
+      };
+
+      const orchestrationState: OrchestrationState = {
+        researchId: 'research1',
+        plan: createResearchPlan({
+          executionSteps: [
+            createResearchStep({ id: 'step1', priority: 2, fallbackStrategies: [] }),
+            createResearchStep({ id: 'step2', dependencies: [] }),
+          ],
+        }),
+        currentPhase: 'execution',
+        activeSteps: [],
+        completedSteps: [],
+        issues: [],
+        progress: { completedSteps: 0, totalSteps: 2, estimatedTimeRemaining: 10, overallConfidence: 0.8 },
+        startedAt: new Date(),
+        lastUpdated: new Date(),
+      };
+
+      const result = await errorRecovery['handleExhaustedRetries']('step1', mockExecution, 'temporary', orchestrationState);
+
+      expect(result.recoveryAction).toBe('abort');
+      expect(result.issue).toBeDefined();
+      expect(result.issue?.severity).toBe('low');
+      expect(result.issue?.description).toContain('aborted');
+    });
+  });
+
+  describe('executeRetry', () => {
+    it('executes retry and updates state', async () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 1,
+        progressUpdates: [],
+      };
+
+      await errorRecovery['executeRetry']('step1', mockExecution);
+
+      const status = errorRecovery.getRecoveryStatus('step1');
+      expect(status.retryCount).toBe(2);
+      expect(status.backoffDelay).toBe(0); // Cleared after retry
+    });
+
+    it('handles retry errors gracefully', async () => {
+      const mockExecution: ResearchStepExecution = {
+        stepId: 'step1',
+        agentId: 'web-research',
+        status: 'failed',
+        retryCount: 0,
+        progressUpdates: [],
+      };
+
+      // Should not throw even if retry logic fails
+      await expect(errorRecovery['executeRetry']('step1', mockExecution)).resolves.not.toThrow();
+    });
+  });
+
+  describe('cleanupRecoveryState - with prefixed research IDs', () => {
+    it('cleans up only steps matching research ID prefix', () => {
+      // Simulate some retry state
+      errorRecovery['retryAttempts'].set('research1-step1', 2);
+      errorRecovery['retryAttempts'].set('research1-step2', 1);
+      errorRecovery['retryAttempts'].set('research2-step1', 3);
+      errorRecovery['backoffDelays'].set('research1-step1', 5000);
+      errorRecovery['recoveryInProgress'].add('research1-step1');
+
+      errorRecovery.cleanupRecoveryState('research1');
+
+      // research1 steps should be cleaned
+      expect(errorRecovery['retryAttempts'].has('research1-step1')).toBe(false);
+      expect(errorRecovery['retryAttempts'].has('research1-step2')).toBe(false);
+      expect(errorRecovery['backoffDelays'].has('research1-step1')).toBe(false);
+      expect(errorRecovery['recoveryInProgress'].has('research1-step1')).toBe(false);
+
+      // research2 steps should remain
+      expect(errorRecovery['retryAttempts'].has('research2-step1')).toBe(true);
+    });
+  });
+
+  describe('findAlternativeAgent - overload prevention', () => {
+    it('returns null when all alternatives are overloaded', () => {
+      const steps = [
+        { agentType: 'academic-research' },
+        { agentType: 'academic-research' },
+        { agentType: 'academic-research' },
+        { agentType: 'news-research' },
+        { agentType: 'news-research' },
+        { agentType: 'news-research' },
+      ] as Array<Pick<ResearchStep, 'agentType'>>;
+
+      // All alternatives have 3 or more usages, should return null
+      const result = errorRecovery['findAlternativeAgent']('web-research', steps);
+      expect(result).toBeNull();
+    });
+
+    it('returns available alternative when one is below overload threshold', () => {
+      const steps = [
+        { agentType: 'academic-research' },
+        { agentType: 'academic-research' },
+        { agentType: 'academic-research' },
+        { agentType: 'news-research' },
+      ] as Array<Pick<ResearchStep, 'agentType'>>;
+
+      // news-research has < 3 usages, should be returned
+      const result = errorRecovery['findAlternativeAgent']('web-research', steps);
+      expect(result).toBe('news-research');
+    });
+  });
 });
