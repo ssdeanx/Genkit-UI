@@ -195,4 +195,53 @@ describe('CoderAgentExecutor', () => {
       (failedEvent?.status?.message?.parts[0] as TextPart | undefined)?.text
     ).toContain('Task was cancelled');
   });
+
+  it('handles missing task in request context', async () => {
+    const contextWithoutTask: RequestContext = {
+      taskId: 'test-task',
+      contextId: 'test-context',
+      task: undefined as unknown as Task,
+      userMessage: {
+        kind: 'message',
+        messageId: 'user-message-id',
+        role: 'user',
+        parts: [{ kind: 'text', text: 'write code' }],
+      },
+    };
+
+    await executor.execute(contextWithoutTask, mockEventBus);
+
+    // Should return early without publishing any events
+    expect(mockEventBus.publish).not.toHaveBeenCalled();
+  });
+
+  it('handles cancelled task at execution start', async () => {
+    // Cancel task before execution
+    await (executor as CoderAgentExecutor).cancelTask(
+      mockRequestContext.task!.id,
+      mockEventBus
+    );
+
+    // Now try to execute
+    await executor.execute(mockRequestContext, mockEventBus);
+
+    // Should publish working status first
+    expect(mockEventBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: expect.objectContaining({
+          state: 'working',
+        }),
+      })
+    );
+
+    // Should immediately fail due to cancellation
+    const failedCall = ((mockEventBus.publish as Mock).mock.calls as Array<[A2AEvent]>).find(
+      (call) => (call[0] as TaskStatusUpdateEvent).status?.state === 'failed'
+    );
+    expect(failedCall).toBeDefined();
+    const failedEvent = failedCall?.[0] as TaskStatusUpdateEvent;
+    expect(
+      (failedEvent?.status?.message?.parts[0] as TextPart | undefined)?.text
+    ).toContain('Task was cancelled');
+  });
 });

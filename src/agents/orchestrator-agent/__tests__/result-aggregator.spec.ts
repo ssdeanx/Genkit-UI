@@ -4,7 +4,8 @@ import type {
   ResearchStepResult,
   OrchestrationState,
   ResearchResult,
-  ResearchPlan
+  ResearchPlan,
+  SourceCitation
 } from '../../shared/interfaces.js';
 
 describe('ResultAggregator', () => {
@@ -436,6 +437,519 @@ describe('ResultAggregator', () => {
       const cached = aggregator.getCachedResults('nonexistent');
 
       expect(cached).toBeNull();
+    });
+  });
+
+  describe('Edge case coverage for uncovered lines', () => {
+    it('should handle empty group check (line 389-390)', () => {
+      // Create findings that will trigger grouping with empty group edge case
+      const results = [createResearchStepResult({
+        data: {
+          findings: [
+            {
+              claim: 'Test claim 1',
+              evidence: 'Evidence 1',
+              confidence: 0.8,
+              sources: [0],
+              category: 'factual'
+            },
+            {
+              claim: 'Test claim 2 similar to claim 1',
+              evidence: 'Evidence 2',
+              confidence: 0.7,
+              sources: [1],
+              category: 'factual'
+            }
+          ]
+        },
+        sources: [
+          {
+            title: 'Source 1',
+            url: 'https://example1.com',
+            type: 'web',
+            credibilityScore: 0.8,
+            accessedAt: new Date()
+          },
+          {
+            title: 'Source 2',
+            url: 'https://example2.com',
+            type: 'academic',
+            credibilityScore: 0.9,
+            accessedAt: new Date()
+          }
+        ]
+      })];
+
+      const state = createOrchestrationState({});
+      const aggregated = aggregator.aggregateResults(results, state);
+      
+      expect(aggregated.findings.length).toBeGreaterThan(0);
+    });
+
+    it('should handle low credibility score (line 510-511)', () => {
+      const results = [createResearchStepResult({
+        sources: [{
+          title: 'Source with low credibility',
+          url: 'https://example.com',
+          type: 'web',
+          credibilityScore: 0.1, // Very low credibility score
+          accessedAt: new Date()
+        }]
+      })];
+
+      const state = createOrchestrationState({});
+      const aggregated = aggregator.aggregateResults(results, state);
+      
+      expect(aggregated.sources.length).toBe(1);
+      if (aggregated.sources[0]) {
+        expect(aggregated.sources[0].credibilityScore).toBe(0.1);
+      }
+    });
+
+    it('should propagate NaN from quality scores (line 683-684)', () => {
+      const results = [createResearchStepResult({
+        qualityScore: NaN,
+        data: {
+          findings: [{
+            claim: 'Test',
+            evidence: 'Evidence',
+            confidence: 0.8,
+            sources: [0],
+            category: 'factual'
+          }]
+        }
+      })];
+
+      const state = createOrchestrationState({});
+      const aggregated = aggregator.aggregateResults(results, state);
+      
+      // NaN propagates through calculation
+      expect(Number.isNaN(aggregated.confidence)).toBe(true);
+    });
+
+    it('should propagate Infinity from processing time (line 693-694)', () => {
+      const results = [createResearchStepResult({
+        processingTime: Infinity
+      })];
+
+      const state = createOrchestrationState({});
+      const aggregated = aggregator.aggregateResults(results, state);
+      
+      // Infinity propagates through sum
+      expect(aggregated.processingTime).toBe(Infinity);
+    });
+
+    it('should handle missing processing time (line 698-703)', () => {
+      const results = [createResearchStepResult({
+        processingTime: 0
+      })];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (results[0] as any).processingTime;
+
+      const state = createOrchestrationState({});
+      const aggregated = aggregator.aggregateResults(results, state);
+      
+      // When processingTime is deleted, reduce treats it as 0 + undefined = NaN
+      expect(Number.isNaN(aggregated.processingTime)).toBe(true);
+    });
+
+    it('should handle empty sources in diversity check (line 742-748)', () => {
+      const result: ResearchResult = {
+        topic: 'Test',
+        findings: [{
+          claim: 'Test claim',
+          evidence: 'Test evidence',
+          confidence: 0.8,
+          sources: [],
+          category: 'factual'
+        }],
+        sources: [],
+        methodology: 'Test',
+        confidence: 0.8,
+        generatedAt: new Date(),
+        processingTime: 1000
+      };
+
+      const validation = aggregator.validateResultIntegrity(result);
+      
+      expect(validation.isValid).toBe(false);
+      expect(validation.issues.some(issue => issue.includes('source'))).toBe(true);
+    });
+
+    it('should handle findings with no evidence (line 329-330)', () => {
+      const results = [createResearchStepResult({
+        data: {
+          findings: [{
+            claim: 'Test claim',
+            evidence: '', // Empty evidence
+            confidence: 0.8,
+            sources: [0],
+            category: 'factual'
+          }]
+        },
+        sources: [{
+          title: 'Source',
+          url: 'https://example.com',
+          type: 'web',
+          credibilityScore: 0.8,
+          accessedAt: new Date()
+        }]
+      })];
+
+      const state = createOrchestrationState({});
+      const aggregated = aggregator.aggregateResults(results, state);
+      
+      expect(aggregated.findings.length).toBeGreaterThan(0);
+    });
+
+    it('should handle findings with empty sources array (line 345-348)', () => {
+      const results = [createResearchStepResult({
+        data: {
+          findings: [{
+            claim: 'Test claim',
+            evidence: 'Test evidence',
+            confidence: 0.8,
+            sources: [], // Empty sources
+            category: 'factual'
+          }]
+        },
+        sources: []
+      })];
+
+      const state = createOrchestrationState({});
+      const aggregated = aggregator.aggregateResults(results, state);
+      
+      expect(aggregated.findings.length).toBeGreaterThan(0);
+    });
+
+    it('should validate findings without issues (line 435-436)', () => {
+      const result: ResearchResult = {
+        topic: 'Valid Research',
+        findings: [{
+          claim: 'Well-supported claim',
+          evidence: 'Strong evidence',
+          confidence: 0.9,
+          sources: [0, 1],
+          category: 'factual'
+        }],
+        sources: [
+          {
+            title: 'Academic Source',
+            url: 'https://academic.com',
+            type: 'academic',
+            credibilityScore: 0.95,
+            accessedAt: new Date()
+          },
+          {
+            title: 'Government Source',
+            url: 'https://gov.com',
+            type: 'government',
+            credibilityScore: 0.9,
+            accessedAt: new Date()
+          }
+        ],
+        methodology: 'Comprehensive',
+        confidence: 0.9,
+        generatedAt: new Date(),
+        processingTime: 1000
+      };
+
+      const validation = aggregator.validateResultIntegrity(result);
+      
+      // Should pass all validation with diverse sources
+      expect(validation.isValid).toBe(true);
+      expect(validation.issues).toHaveLength(0);
+    });
+
+    it('should detect missing critical fields (line 447-448)', () => {
+      const result: ResearchResult = {
+        topic: '',  // Empty topic
+        findings: [{
+          claim: 'Test',
+          evidence: 'Evidence',
+          confidence: 0.8,
+          sources: [0],
+          category: 'factual'
+        }],
+        sources: [{
+          title: 'Source',
+          url: 'https://example.com',
+          type: 'web',
+          credibilityScore: 0.8,
+          accessedAt: new Date()
+        }],
+        methodology: '',  // Empty methodology
+        confidence: 0.8,
+        generatedAt: new Date(),
+        processingTime: 1000
+      };
+
+      const validation = aggregator.validateResultIntegrity(result);
+      
+      // Should detect empty required fields
+      expect(validation.isValid).toBe(false);
+    });
+
+    it('should handle low quality metrics (line 642-644)', () => {
+      const result: ResearchResult = {
+        topic: 'Test',
+        findings: [{
+          claim: 'Low quality finding',
+          evidence: 'Weak evidence',
+          confidence: 0.3,
+          sources: [0],
+          category: 'speculative'
+        }],
+        sources: [{
+          title: 'Low credibility source',
+          url: 'https://example.com',
+          type: 'web',
+          credibilityScore: 0.3,
+          accessedAt: new Date()
+        }],
+        methodology: 'Minimal',
+        confidence: 0.3,
+        generatedAt: new Date(),
+        processingTime: 1000
+      };
+
+      const validation = aggregator.validateResultIntegrity(result);
+      
+      // Should flag low quality
+      expect(validation.isValid).toBe(false);
+      expect(validation.issues.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Additional branch coverage', () => {
+    it('should handle deduplication when cache has existing source', () => {
+      const sources: SourceCitation[] = [
+        {
+          title: 'Source 1',
+          url: 'https://example1.com',
+          type: 'web',
+          credibilityScore: 0.7,
+          publicationDate: new Date(),
+          accessedAt: new Date(),
+        },
+        {
+          title: 'Source 1',
+          url: 'https://example1.com',
+          type: 'web',
+          credibilityScore: 0.9,
+          publicationDate: new Date(),
+          accessedAt: new Date(),
+        },
+      ];
+
+      const deduplicated = aggregator['deduplicateSources'](sources);
+      expect(deduplicated).toHaveLength(1);
+      expect(deduplicated[0]?.credibilityScore).toBe(0.9); // Should use max
+    });
+
+    it('should handle empty results array in extractAllSources', () => {
+      const sources = aggregator['extractAllSources']([]);
+      expect(sources).toHaveLength(0);
+    });
+
+    it('should handle results with empty sources array', () => {
+      const results: ResearchStepResult[] = [
+        createResearchStepResult({
+          sources: [],
+        }),
+      ];
+      const sources = aggregator['extractAllSources'](results);
+      expect(sources).toHaveLength(0);
+    });
+
+    it('should handle results with non-array sources', () => {
+      const results: ResearchStepResult[] = [
+        {
+          stepId: 'step1',
+          status: 'success',
+          data: {},
+          sources: null as unknown as SourceCitation[],
+          qualityScore: 0.8,
+          processingTime: 1,
+          issues: [],
+          metadata: {},
+        },
+      ];
+      const sources = aggregator['extractAllSources'](results);
+      expect(sources).toHaveLength(0);
+    });
+
+    it('should generate methodology summary with phases', () => {
+      const plan = createResearchPlan({
+        methodology: {
+          approach: 'systematic' as const,
+          justification: 'Test',
+          phases: ['Phase 1: Initial research', 'Phase 2: Deep dive'],
+          qualityControls: [],
+        }
+      });
+      const results = [createResearchStepResult({})];
+
+      const methodology = aggregator['generateMethodologySummary'](plan, results);
+      expect(methodology).toContain('Test topic');
+      expect(methodology).toContain('research');
+    });
+
+    it('should calculate confidence with varying quality scores', () => {
+      const results: ResearchStepResult[] = [
+        createResearchStepResult({ qualityScore: 0.95 }),
+        createResearchStepResult({ qualityScore: 0.85 }),
+        createResearchStepResult({ qualityScore: 0.75 }),
+      ];
+
+      const confidence = aggregator['calculateOverallConfidence'](results);
+      expect(confidence).toBeGreaterThan(0.7);
+      expect(confidence).toBeLessThan(0.95);
+    });
+
+    it('should handle zero-length results in confidence calculation', () => {
+      const confidence = aggregator['calculateOverallConfidence']([]);
+      expect(confidence).toBe(0);
+    });
+
+    it('should handle single result in confidence calculation', () => {
+      const results: ResearchStepResult[] = [
+        createResearchStepResult({ qualityScore: 0.9 }),
+      ];
+
+      const confidence = aggregator['calculateOverallConfidence'](results);
+      expect(confidence).toBeGreaterThan(0);
+    });
+
+    it('should calculate total processing time correctly', () => {
+      const results: ResearchStepResult[] = [
+        createResearchStepResult({ processingTime: 1000 }),
+        createResearchStepResult({ processingTime: 2000 }),
+        createResearchStepResult({ processingTime: 3000 }),
+      ];
+
+      const total = aggregator['calculateTotalProcessingTime'](results);
+      expect(total).toBe(6000);
+    });
+
+    it('should handle missing processing time gracefully', () => {
+      const results: ResearchStepResult[] = [
+        createResearchStepResult({ processingTime: undefined as unknown as number }),
+      ];
+
+      const total = aggregator['calculateTotalProcessingTime'](results);
+      expect(total).toBeNaN();
+    });
+
+    it('should get cached results for existing research', () => {
+      const results: ResearchStepResult[] = [
+        createResearchStepResult({ stepId: 'step1' }),
+      ];
+      const state = createOrchestrationState({});
+
+      aggregator.aggregateResults(results, state);
+
+      const cached = aggregator.getCachedResults('research1');
+      expect(cached).toEqual(results);
+    });
+
+    it('should generate source key for deduplication', () => {
+      const source: SourceCitation = {
+        title: 'Test Source',
+        url: 'https://example.com/path',
+        type: 'web',
+        credibilityScore: 0.8,
+        publicationDate: new Date(),
+        accessedAt: new Date(),
+      };
+
+      const key = aggregator['generateSourceKey'](source);
+      expect(key).toBeDefined();
+      expect(typeof key).toBe('string');
+    });
+
+    it('should validate result with low overall confidence', () => {
+      const result: ResearchResult = {
+        topic: 'Test',
+        findings: [
+          {
+            claim: 'Low confidence finding 1',
+            evidence: 'Limited evidence',
+            confidence: 0.2,
+            sources: [0],
+            category: 'speculative',
+          },
+          {
+            claim: 'Low confidence finding 2',
+            evidence: 'Limited evidence',
+            confidence: 0.25,
+            sources: [0],
+            category: 'speculative',
+          },
+        ],
+        sources: [
+          {
+            title: 'Weak Source',
+            url: 'https://example.com',
+            type: 'web',
+            credibilityScore: 0.4,
+            publicationDate: new Date(),
+            accessedAt: new Date(),
+          },
+        ],
+        methodology: 'Test',
+        confidence: 0.35,
+        generatedAt: new Date(),
+        processingTime: 1000,
+      };
+
+      const validation = aggregator.validateResultIntegrity(result);
+      expect(validation.issues.length).toBeGreaterThan(0);
+      expect(validation.issues.some(i => i.includes('low confidence'))).toBe(true);
+    });
+
+    it('should detect source diversity issues', () => {
+      const result: ResearchResult = {
+        topic: 'Test',
+        findings: [
+          { claim: 'F1', evidence: 'E1', confidence: 0.8, sources: [0], category: 'factual' },
+          { claim: 'F2', evidence: 'E2', confidence: 0.8, sources: [1], category: 'factual' },
+          { claim: 'F3', evidence: 'E3', confidence: 0.8, sources: [2], category: 'factual' },
+        ],
+        sources: [
+          {
+            title: 'Web 1',
+            url: 'https://web1.com',
+            type: 'web',
+            credibilityScore: 0.6,
+            publicationDate: new Date(),
+            accessedAt: new Date(),
+          },
+          {
+            title: 'Web 2',
+            url: 'https://web2.com',
+            type: 'web',
+            credibilityScore: 0.6,
+            publicationDate: new Date(),
+            accessedAt: new Date(),
+          },
+          {
+            title: 'Web 3',
+            url: 'https://web3.com',
+            type: 'web',
+            credibilityScore: 0.6,
+            publicationDate: new Date(),
+            accessedAt: new Date(),
+          },
+        ],
+        methodology: 'Test',
+        confidence: 0.6,
+        generatedAt: new Date(),
+        processingTime: 1000,
+      };
+
+      const validation = aggregator.validateResultIntegrity(result);
+      expect(validation.issues.some(i => i.includes('diversity'))).toBe(true);
     });
   });
 });

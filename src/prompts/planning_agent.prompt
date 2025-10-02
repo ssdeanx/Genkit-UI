@@ -9,7 +9,7 @@ input:
     constraints?(object):
       budget?: string
       deadline?: string
-      sources(array)?: string
+      sources(array): string
 output:
   schema:
     title: string
@@ -17,7 +17,7 @@ output:
     steps(array):
       id: string
       description: string
-      successCriteria(array): string
+      successCriteria: string
     risks(array): string
     notes?: string
 ---
