@@ -13,4 +13,7 @@ export { academicResearchFlow } from './flows/academicResearchFlow.js';
 export { dataAnalysisFlow } from './flows/dataAnalysisFlow.js';
 export { contentEditorFlow } from './flows/contentEditorFlow.js';
 export { webScrapingTool } from './tools/webScrapingTool.js';
+export { calculatorTool } from './tools/calculatorTool.js';
+export { wikipediaTool } from './tools/wikipediaTool.js';
+export { weatherTool } from './tools/weatherTool.js';
 export { webScrapingFlow } from './flows/webScrapingFlow.js';

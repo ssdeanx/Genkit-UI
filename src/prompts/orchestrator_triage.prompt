@@ -8,7 +8,7 @@ input:
     query: string
 output:
   schema:
-    delegateTo(array): string
+    delegateTo(array, agents to delegate to): string
     rationale: string
     nextAction: string
 ---

@@ -2,7 +2,6 @@ import { ai } from '../config.js';
 import { z } from 'genkit';
 import { readFile } from 'fs/promises';
 import path from 'path';
-import pdf from 'pdf-parse';
 import { chunk } from 'llm-chunk';
 import { Document } from 'genkit/retriever';
 import { devLocalIndexerRef } from '@genkit-ai/dev-local-vectorstore';
@@ -40,6 +39,8 @@ export const indexDocumentsFlow = ai.defineFlow(
       if (!content && typeof filePath === 'string' && filePath.trim().length > 0) {
         const resolved = path.resolve(filePath);
         const buffer = await readFile(resolved);
+        // Dynamic import to avoid loading pdf-parse test data at module load time
+        const { default: pdf } = await import('pdf-parse');
         const data = await pdf(buffer);
         content = typeof (data.text) === 'string' ? data.text : '';
       }
